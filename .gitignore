@@ -17,13 +17,22 @@ $RECYCLE.BIN/
 log.txt
 npm-debug.log*
 
-/.idea
-/.ionic
-/.sass-cache
-/.sourcemaps
-/.versions
+# IDE and Editor files
+.idea/
 /.vscode/*
 !/.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
 /coverage
 /dist
 /node_modules
