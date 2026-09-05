@@ -34,6 +34,9 @@ import '@ionic/vue/css/palettes/dark.class.css';
 
 /* Theme variables */
 import './theme/variables.css';
+import { aplicar_tema_guardado } from './config/tema';
+
+aplicar_tema_guardado();
 
 const app = createApp(App)
   .use(IonicVue)
