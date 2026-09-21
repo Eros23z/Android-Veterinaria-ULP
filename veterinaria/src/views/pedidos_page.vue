@@ -1,23 +1,37 @@
 <template>
   <comp-page titulo="Pedidos" :mostrar_actualizar="true" @actualizar="cargar">
-    <comp-esqueleto v-if="cargando" />
+    <comp-buscador placeholder="Buscar pedidos..." @buscar="onBuscar" />
 
-    <div v-else-if="pedidos.length === 0" class="ion-padding ion-text-center">
+    <comp-esqueleto v-if="pedidos_store.cargando && pedidos_store.pedidos.length === 0" />
+
+    <div v-else-if="pedidos_store.pedidos.length === 0" class="ion-padding ion-text-center">
       <p>No hay pedidos registrados.</p>
     </div>
 
-    <ion-list v-else>
-      <ion-item v-for="p in pedidos" :key="p.id">
-        <ion-label>
-          <h2>{{ p.id }} - {{ p.cliente || "Mostrador / Sin cliente" }}</h2>
-          <p>{{ p.detalle }}</p>
-          <p>${{ p.total.toLocaleString() }} - Pago: {{ p.estado_pago }}</p>
-        </ion-label>
-        <ion-badge :color="obtenerColorEstado(p.estado)" slot="end">
-          {{ p.estado }}
-        </ion-badge>
-      </ion-item>
-    </ion-list>
+    <comp-lista
+      v-else
+      :total="pedidos_store.paginacion.total"
+      :cantidad_mostrada="pedidos_store.pedidos.length"
+      :hay_mas="pedidos_store.paginacion.hay_mas"
+      :cargando="pedidos_store.cargando"
+      @ver_mas="cargarMas"
+    >
+      <template #lista>
+        <ion-list>
+          <ion-item v-for="p in pedidos_store.pedidos" :key="p.id">
+            <ion-label>
+              <h2>Pedido #{{ p.id }} - {{ p.cliente?.nombre || "Sin cliente" }}</h2>
+              <p>Fecha: {{ new Date(p.fecha_pedido).toLocaleDateString() }}</p>
+              <p>${{ p.total.toLocaleString() }}</p>
+              <p v-if="p.notas" style="font-style: italic; font-size: 0.9em;">{{ p.notas }}</p>
+            </ion-label>
+            <ion-badge :color="obtenerColorEstado(p.estado)" slot="end">
+              {{ formatEstado(p.estado) }}
+            </ion-badge>
+          </ion-item>
+        </ion-list>
+      </template>
+    </comp-lista>
   </comp-page>
 </template>
 
@@ -26,20 +40,32 @@ import { ref, onMounted } from "vue";
 import { IonList, IonItem, IonLabel, IonBadge } from "@ionic/vue";
 import compPage from "@/components/estructura/comp_page.vue";
 import compEsqueleto from "@/components/base/comp_esqueleto.vue";
-import { obtener_pedidos } from "@/datos/pedidos";
+import compBuscador from "@/components/base/comp_buscador.vue";
+import compLista from "@/components/base/comp_lista.vue";
+import { pedidos_store } from "@/stores/pedidos_store";
 
-const cargando = ref(true);
-const pedidos = ref([]);
+const terminoBusqueda = ref("");
+
+function formatEstado(estado) {
+  if (!estado) return '';
+  return estado.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
 
 function obtenerColorEstado(estado) {
   switch (estado) {
-    case "En preparación":
+    case "borrador":
+      return "light";
+    case "confirmado":
+      return "primary";
+    case "en_preparacion":
       return "warning";
-    case "Listo":
+    case "listo":
       return "success";
-    case "Entregado":
+    case "entregado":
       return "tertiary";
-    case "Cancelado":
+    case "cerrado":
+      return "dark";
+    case "cancelado":
       return "danger";
     default:
       return "medium";
@@ -47,16 +73,20 @@ function obtenerColorEstado(estado) {
 }
 
 async function cargar(event = null) {
-  cargando.value = true;
-  try {
-    const res = await obtener_pedidos();
-    pedidos.value = res.pedidos;
-  } finally {
-    cargando.value = false;
-    if (event?.target?.complete) {
-      event.target.complete();
-    }
+  pedidos_store.reiniciar_paginacion();
+  await pedidos_store.cargar_pedidos({ buscar: terminoBusqueda.value });
+  if (event?.target?.complete) {
+    event.target.complete();
   }
+}
+
+async function cargarMas() {
+  await pedidos_store.cargar_mas_pedidos();
+}
+
+function onBuscar(termino) {
+  terminoBusqueda.value = termino;
+  cargar();
 }
 
 onMounted(() => cargar());

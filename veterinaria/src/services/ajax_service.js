@@ -37,8 +37,9 @@ export async function peticion_ajax(ruta, opciones = {}) {
 
     if (!respuesta.ok) {
       let detalleError = `Error HTTP ${respuesta.status}: ${respuesta.statusText}`;
+      let errorJson = null;
       try {
-        const errorJson = await respuesta.json();
+        errorJson = await respuesta.json();
         if (errorJson?.mensaje) {
           detalleError = errorJson.mensaje;
         } else if (errorJson?.title) {
@@ -47,7 +48,11 @@ export async function peticion_ajax(ruta, opciones = {}) {
       } catch {
         // En caso de que el cuerpo del error no sea JSON
       }
-      throw new Error(detalleError);
+      const err = new Error(detalleError);
+      err.status = respuesta.status;
+      err.codigo = errorJson?.codigo;
+      err.mensaje = errorJson?.mensaje || detalleError;
+      throw err;
     }
 
     const contentType = respuesta.headers.get('content-type');
@@ -79,5 +84,13 @@ export const ajax_service = {
       body: JSON.stringify(datos),
     }),
 };
+
+export async function enviar(endpoint, metodo = 'GET', datos = null) {
+  const opciones = { method: metodo };
+  if (datos && (metodo === 'POST' || metodo === 'PUT' || metodo === 'PATCH')) {
+    opciones.body = JSON.stringify(datos);
+  }
+  return peticion_ajax(endpoint, opciones);
+}
 
 export default ajax_service;
