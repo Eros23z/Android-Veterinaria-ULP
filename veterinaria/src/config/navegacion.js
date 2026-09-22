@@ -1,4 +1,11 @@
-import { homeOutline, pricetagsOutline, peopleOutline, receiptOutline, personCircleOutline } from 'ionicons/icons';
+import {
+  homeOutline,
+  pricetagsOutline,
+  peopleOutline,
+  receiptOutline,
+  personCircleOutline,
+  shieldCheckmarkOutline,
+} from 'ionicons/icons';
 
 export const navegacion = [
   {
@@ -8,7 +15,10 @@ export const navegacion = [
     orden: 10,
     ruta: '/app/inicio',
     icono: homeOutline,
-    componente: () => import('@/views/inicio_page.vue')
+    componente: () => import('@/views/inicio_page.vue'),
+    roles: ['*'],
+    menu_roles: ['*'],
+    tab_roles: ['*'],
   },
   {
     id: 'productos',
@@ -17,7 +27,10 @@ export const navegacion = [
     orden: 20,
     ruta: '/app/productos',
     icono: pricetagsOutline,
-    componente: () => import('@/views/productos_page.vue')
+    componente: () => import('@/views/productos_page.vue'),
+    roles: ['ADMIN', 'VETERINARIO'],
+    menu_roles: ['ADMIN', 'VETERINARIO'],
+    tab_roles: ['ADMIN', 'VETERINARIO'],
   },
   {
     id: 'clientes',
@@ -26,7 +39,10 @@ export const navegacion = [
     orden: 30,
     ruta: '/app/clientes',
     icono: peopleOutline,
-    componente: () => import('@/views/clientes_page.vue')
+    componente: () => import('@/views/clientes_page.vue'),
+    roles: ['ADMIN', 'VETERINARIO'],
+    menu_roles: ['ADMIN', 'VETERINARIO'],
+    tab_roles: ['ADMIN', 'VETERINARIO'],
   },
   {
     id: 'pedidos',
@@ -35,7 +51,22 @@ export const navegacion = [
     orden: 40,
     ruta: '/app/pedidos',
     icono: receiptOutline,
-    componente: () => import('@/views/pedidos_page.vue')
+    componente: () => import('@/views/pedidos_page.vue'),
+    roles: ['ADMIN', 'VETERINARIO'],
+    menu_roles: ['ADMIN', 'VETERINARIO'],
+    tab_roles: ['ADMIN', 'VETERINARIO'],
+  },
+  {
+    id: 'usuarios',
+    grupo_menu: 'configuracion',
+    titulo: 'Usuarios',
+    orden: 45,
+    ruta: '/app/usuarios',
+    icono: shieldCheckmarkOutline,
+    componente: () => import('@/views/usuarios_page.vue'),
+    roles: ['ADMIN'],
+    menu_roles: ['ADMIN'],
+    tab_roles: [],
   },
   {
     id: 'cuenta',
@@ -44,6 +75,9 @@ export const navegacion = [
     orden: 50,
     ruta: '/app/cuenta',
     icono: personCircleOutline,
-    componente: () => import('@/views/cuenta_page.vue')
-  }
-];
+    componente: () => import('@/views/cuenta_page.vue'),
+    roles: ['*'],
+    menu_roles: ['*'],
+    tab_roles: ['*'],
+  },
+];

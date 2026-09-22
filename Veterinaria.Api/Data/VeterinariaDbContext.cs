@@ -15,6 +15,9 @@ public class VeterinariaDbContext : DbContext
     public DbSet<Cliente> Clientes => Set<Cliente>();
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<PedidoItem> PedidoItems => Set<PedidoItem>();
+    public DbSet<Rol> Roles => Set<Rol>();
+    public DbSet<Usuario> Usuarios => Set<Usuario>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,6 +81,39 @@ public class VeterinariaDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(pi => pi.ProductoId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Rol>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.Nombre).IsRequired().HasMaxLength(100);
+            entity.Property(r => r.Codigo).IsRequired().HasMaxLength(50);
+            entity.HasIndex(r => r.Codigo).IsUnique();
+        });
+
+        modelBuilder.Entity<Usuario>(entity =>
+        {
+            entity.HasKey(u => u.Id);
+            entity.Property(u => u.Email).IsRequired().HasMaxLength(150);
+            entity.Property(u => u.PasswordHash).IsRequired().HasMaxLength(500);
+            entity.HasIndex(u => u.Email).IsUnique();
+
+            entity.HasOne(u => u.Rol)
+                .WithMany()
+                .HasForeignKey(u => u.RolId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(rt => rt.Id);
+            entity.Property(rt => rt.TokenHash).IsRequired().HasMaxLength(64);
+            entity.HasIndex(rt => rt.TokenHash).IsUnique();
+
+            entity.HasOne(rt => rt.Usuario)
+                .WithMany(u => u.RefreshTokens)
+                .HasForeignKey(rt => rt.UsuarioId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

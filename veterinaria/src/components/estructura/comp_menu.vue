@@ -59,6 +59,7 @@ import {
   IonMenuToggle,
 } from "@ionic/vue";
 import { navegacion } from "@/config/navegacion";
+import { sesion_store } from "@/stores/sesion_store";
 
 defineProps({
   content_id: { type: String, required: true },
@@ -66,12 +67,20 @@ defineProps({
 
 const operacion = computed(() =>
   navegacion
-    .filter((item) => item.grupo_menu === "operacion")
+    .filter(
+      (item) =>
+        item.grupo_menu === "operacion" &&
+        sesion_store.tiene_rol(item.menu_roles),
+    )
     .sort((a, b) => a.orden - b.orden),
 );
 const configuracion = computed(() =>
   navegacion
-    .filter((item) => item.grupo_menu === "configuracion")
+    .filter(
+      (item) =>
+        item.grupo_menu === "configuracion" &&
+        sesion_store.tiene_rol(item.menu_roles),
+    )
     .sort((a, b) => a.orden - b.orden),
 );
 </script>

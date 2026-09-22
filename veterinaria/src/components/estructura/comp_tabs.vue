@@ -16,6 +16,16 @@
 import { computed } from "vue";
 import { IonTabBar, IonTabButton, IonIcon, IonLabel } from "@ionic/vue";
 import { navegacion } from "@/config/navegacion";
+import { sesion_store } from "@/stores/sesion_store";
 
-const tabs = computed(() => [...navegacion].sort((a, b) => a.orden - b.orden));
+const tabs = computed(() =>
+  [...navegacion]
+    .filter(
+      (item) =>
+        item.tab_roles &&
+        item.tab_roles.length > 0 &&
+        sesion_store.tiene_rol(item.tab_roles),
+    )
+    .sort((a, b) => a.orden - b.orden),
+);
 </script>

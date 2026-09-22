@@ -1,7 +1,15 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Veterinaria.Api.Auth;
 using Veterinaria.Api.Data;
+using Veterinaria.Api.Domain.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +22,70 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
     });
+
+// Inyección de servicios de autenticación y seguridad
+builder.Services.AddScoped<TokenService>();
+builder.Services.AddScoped<IPasswordHasher<Usuario>, PasswordHasher<Usuario>>();
+
+// Configuración de Autenticación con JWT Bearer
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "ClaveEfimeraVeterinariaSanRoque2026SuperSeguraDesarrollo12345!";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "Veterinaria.Api";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "Veterinaria.Client";
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ClockSkew = TimeSpan.Zero,
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var db = context.HttpContext.RequestServices.GetRequiredService<VeterinariaDbContext>();
+                var subClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                            ?? context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+                if (!long.TryParse(subClaim, out var usuarioId))
+                {
+                    context.Fail("Token inválido: falta claim sub.");
+                    return;
+                }
+
+                var usuario = await db.Usuarios
+                    .Include(u => u.Rol)
+                    .FirstOrDefaultAsync(u => u.Id == usuarioId);
+
+                if (usuario == null || !usuario.Activo)
+                {
+                    context.Fail("Usuario inactivo o no encontrado.");
+                    return;
+                }
+
+                var tokenRol = context.Principal?.FindFirst("rol_codigo")?.Value
+                            ?? context.Principal?.FindFirst(ClaimTypes.Role)?.Value;
+
+                var rolActual = usuario.Rol?.Codigo;
+
+                if (tokenRol != rolActual)
+                {
+                    context.Fail("El rol del usuario ha cambiado.");
+                    return;
+                }
+            },
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 // Configuración de CORS para desarrollo y Capacitor (WebView)
 builder.Services.AddCors(options =>
@@ -64,8 +136,10 @@ app.UseCors("PermitirTodoDesarrollo");
 // Servir archivos estáticos desde wwwroot/seed/
 app.UseStaticFiles();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
+

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Veterinaria.Api.Data;
@@ -5,6 +6,7 @@ using Veterinaria.Api.Domain.Entities;
 
 namespace Veterinaria.Api.Controllers;
 
+[Authorize(Roles = "ADMIN,VETERINARIO")]
 [ApiController]
 [Route("api/[controller]")]
 public class ClientesController : ControllerBase
