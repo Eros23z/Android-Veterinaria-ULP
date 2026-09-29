@@ -121,6 +121,7 @@ import { sesion_store } from '@/stores/sesion_store';
 import { token_service } from '@/services/token_service';
 import { sesion_service } from '@/services/sesion_service';
 import { biometria_service } from '@/services/biometria_service';
+import { vibrar_toque, vibrar_error } from '@/services/vibracion_service';
 
 const router = useRouter();
 
@@ -132,13 +133,16 @@ const errorMensaje = ref(null);
 async function ejecutarLogin() {
   if (!email.value || !password.value) return;
 
+  await vibrar_toque();
   errorMensaje.value = null;
   cargando.value = true;
 
   try {
     await sesion_store.login(email.value.trim(), password.value);
+    await vibrar_toque();
     router.replace('/app/inicio');
   } catch (error) {
+    await vibrar_error();
     errorMensaje.value =
       error.mensaje || error.message || 'No se pudo iniciar sesión. Verifique sus credenciales.';
   } finally {

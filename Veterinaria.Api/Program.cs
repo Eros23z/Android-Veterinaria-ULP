@@ -7,9 +7,13 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using QuestPDF.Infrastructure;
 using Veterinaria.Api.Auth;
 using Veterinaria.Api.Data;
 using Veterinaria.Api.Domain.Entities;
+
+// Configuración de licencia para QuestPDF (Unidad 6)
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -133,7 +137,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("PermitirTodoDesarrollo");
 
-// Servir archivos estáticos desde wwwroot/seed/
+// Asegurar existencia de directorio para uploads de clientes
+var uploadsPath = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "uploads", "clientes");
+if (!Directory.Exists(uploadsPath))
+{
+    Directory.CreateDirectory(uploadsPath);
+}
+
+// Servir archivos estáticos desde wwwroot (uploads, seed, etc.)
 app.UseStaticFiles();
 
 app.UseAuthentication();

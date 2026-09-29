@@ -1,25 +1,50 @@
 import { enviar } from './ajax_service';
 
 /**
- * Crea un nuevo cliente.
- * @param {Object} datos - Datos del cliente (nombre, email, telefono, direccion).
- * @returns {Promise<Object>} Cliente creado.
+ * Convierte un objeto cliente y un archivo de foto opcional en un FormData multipart.
+ * @param {Object} datos
+ * @param {File|null} foto
+ * @returns {FormData}
  */
-export async function crear_cliente(datos) {
-  return await enviar('/api/clientes', 'POST', datos);
+function armar_cliente_form_data(datos, foto = null) {
+  const formData = new FormData();
+  formData.append('nombre', datos.nombre || '');
+  formData.append('email', datos.email || '');
+  formData.append('telefono', datos.telefono || '');
+  formData.append('direccion', datos.direccion || '');
+
+  const archivoFoto = foto || datos.foto;
+  if (archivoFoto instanceof File) {
+    formData.append('foto', archivoFoto);
+  }
+
+  return formData;
 }
 
 /**
- * Actualiza un cliente existente.
+ * Crea un nuevo cliente con datos y foto opcional mediante multipart/form-data.
+ * @param {Object} datos - Datos del cliente (nombre, email, telefono, direccion, foto opcional).
+ * @param {File|null} foto - Archivo de imagen si no está en datos.
+ * @returns {Promise<Object>} Cliente creado.
+ */
+export async function crear_cliente(datos, foto = null) {
+  const payload = armar_cliente_form_data(datos, foto);
+  return await enviar('/api/clientes', 'POST', payload);
+}
+
+/**
+ * Actualiza un cliente existente con datos y foto opcional mediante multipart/form-data.
  * @param {number|string} id - ID del cliente.
  * @param {Object} datos - Datos actualizados del cliente.
+ * @param {File|null} foto - Archivo de imagen nueva si se capturó una.
  * @returns {Promise<Object>} Cliente actualizado.
  */
-export async function actualizar_cliente(id, datos) {
+export async function actualizar_cliente(id, datos, foto = null) {
   if (!id) {
     throw new Error('El ID del cliente es obligatorio para actualizar.');
   }
-  return await enviar(`/api/clientes/${id}`, 'PUT', datos);
+  const payload = armar_cliente_form_data(datos, foto);
+  return await enviar(`/api/clientes/${id}`, 'PUT', payload);
 }
 
 /**

@@ -20,6 +20,10 @@
         <ion-list>
           <ion-item-sliding v-for="c in clientes_store.clientes" :key="c.id">
             <ion-item button @click="abrirModal(c)">
+              <ion-avatar slot="start" class="avatar-cliente">
+                <img v-if="c.foto_url" :src="resolverFoto(c.foto_url)" alt="Foto cliente" />
+                <ion-icon v-else :icon="personCircleOutline" class="icono-avatar-lista"></ion-icon>
+              </ion-avatar>
               <ion-label>
                 <h2>{{ c.nombre }}</h2>
                 <p>Email: {{ c.email }} | Tel: {{ c.telefono }}</p>
@@ -71,9 +75,10 @@ import {
   IonFab,
   IonFabButton,
   IonIcon,
+  IonAvatar,
   alertController,
 } from "@ionic/vue";
-import { add, trashOutline } from 'ionicons/icons';
+import { add, trashOutline, personCircleOutline } from 'ionicons/icons';
 import compPage from "@/components/estructura/comp_page.vue";
 import compEsqueleto from "@/components/base/comp_esqueleto.vue";
 import compBuscador from "@/components/base/comp_buscador.vue";
@@ -81,9 +86,17 @@ import compLista from "@/components/base/comp_lista.vue";
 import modalCliente from "@/components/dominio/modal_cliente.vue";
 import { clientes_store } from "@/stores/clientes_store";
 import { eliminar_cliente } from "@/services/clientes_service";
+import { vibrar_toque, vibrar_error } from "@/services/vibracion_service";
+import { obtener_api_url } from "@/config/debug";
 
 const modalAbierto = ref(false);
 const clienteSeleccionado = ref(null);
+
+function resolverFoto(fotoUrl) {
+  if (!fotoUrl) return '';
+  if (fotoUrl.startsWith('http://') || fotoUrl.startsWith('https://')) return fotoUrl;
+  return `${obtener_api_url()}${fotoUrl.startsWith('/') ? '' : '/'}${fotoUrl}`;
+}
 
 async function cargar(event = null) {
   clientes_store.reiniciar_paginacion();
@@ -101,7 +114,8 @@ async function onBuscar(termino) {
   await clientes_store.buscar(termino);
 }
 
-function abrirModal(cliente) {
+async function abrirModal(cliente) {
+  await vibrar_toque();
   clienteSeleccionado.value = cliente;
   modalAbierto.value = true;
 }
@@ -112,6 +126,7 @@ async function onClienteGuardado() {
 }
 
 async function confirmarBaja(cliente) {
+  await vibrar_toque();
   const alert = await alertController.create({
     header: 'Dar de baja',
     message: `¿Desea dar de baja al cliente "${cliente.nombre}"?`,
@@ -134,13 +149,39 @@ async function confirmarBaja(cliente) {
 
 async function ejecutarBaja(id) {
   try {
+    await vibrar_toque();
     await eliminar_cliente(id);
     await cargar();
   } catch (error) {
+    await vibrar_error();
     console.error('Error al dar de baja:', error);
   }
 }
 
 onMounted(() => cargar());
 </script>
+
+<style scoped>
+.avatar-cliente {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ion-color-step-100, #f2f2f2);
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.avatar-cliente img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.icono-avatar-lista {
+  font-size: 52px;
+  color: var(--ion-color-medium, #92949c);
+}
+</style>
 

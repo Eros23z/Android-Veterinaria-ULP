@@ -12,10 +12,15 @@ namespace Veterinaria.Api.Controllers;
 public class ClientesController : ControllerBase
 {
     private readonly VeterinariaDbContext _context;
+    private readonly IWebHostEnvironment _env;
 
-    public ClientesController(VeterinariaDbContext context)
+    private static readonly string[] ExtensionesPermitidas = { ".jpg", ".jpeg", ".png", ".webp" };
+    private const long TamanoMaximoFotoBytes = 5 * 1024 * 1024; // 5 MB
+
+    public ClientesController(VeterinariaDbContext context, IWebHostEnvironment env)
     {
         _context = context;
+        _env = env;
     }
 
     [HttpGet]
@@ -72,9 +77,10 @@ public class ClientesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> CrearCliente([FromBody] Cliente cliente)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> CrearCliente([FromForm] GuardarClienteRequest request)
     {
-        if (string.IsNullOrWhiteSpace(cliente.Nombre) || string.IsNullOrWhiteSpace(cliente.Telefono))
+        if (string.IsNullOrWhiteSpace(request.Nombre) || string.IsNullOrWhiteSpace(request.Telefono))
         {
             return BadRequest(new
             {
@@ -84,7 +90,7 @@ public class ClientesController : ControllerBase
         }
 
         var existeTelefono = await _context.Clientes
-            .AnyAsync(c => c.Activo && c.Telefono == cliente.Telefono);
+            .AnyAsync(c => c.Activo && c.Telefono == request.Telefono);
 
         if (existeTelefono)
         {
@@ -95,9 +101,29 @@ public class ClientesController : ControllerBase
             });
         }
 
-        cliente.Activo = true;
-        cliente.CreadoEn = DateTime.UtcNow;
-        cliente.ActualizadoEn = DateTime.UtcNow;
+        string? fotoUrl = null;
+        if (request.Foto != null && request.Foto.Length > 0)
+        {
+            var validacionFoto = ValidarFoto(request.Foto);
+            if (validacionFoto != null)
+            {
+                return validacionFoto;
+            }
+
+            fotoUrl = await GuardarArchivoFotoAsync(request.Foto);
+        }
+
+        var cliente = new Cliente
+        {
+            Nombre = request.Nombre.Trim(),
+            Email = request.Email?.Trim() ?? string.Empty,
+            Telefono = request.Telefono.Trim(),
+            Direccion = request.Direccion?.Trim() ?? string.Empty,
+            FotoUrl = fotoUrl,
+            Activo = true,
+            CreadoEn = DateTime.UtcNow,
+            ActualizadoEn = DateTime.UtcNow
+        };
 
         _context.Clientes.Add(cliente);
         await _context.SaveChangesAsync();
@@ -106,9 +132,10 @@ public class ClientesController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> ActualizarCliente(long id, [FromBody] Cliente clienteDto)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> ActualizarCliente(long id, [FromForm] GuardarClienteRequest request)
     {
-        if (string.IsNullOrWhiteSpace(clienteDto.Nombre) || string.IsNullOrWhiteSpace(clienteDto.Telefono))
+        if (string.IsNullOrWhiteSpace(request.Nombre) || string.IsNullOrWhiteSpace(request.Telefono))
         {
             return BadRequest(new
             {
@@ -118,7 +145,7 @@ public class ClientesController : ControllerBase
         }
 
         var existeTelefono = await _context.Clientes
-            .AnyAsync(c => c.Id != id && c.Activo && c.Telefono == clienteDto.Telefono);
+            .AnyAsync(c => c.Id != id && c.Activo && c.Telefono == request.Telefono);
 
         if (existeTelefono)
         {
@@ -135,10 +162,28 @@ public class ClientesController : ControllerBase
             return NotFound();
         }
 
-        cliente.Nombre = clienteDto.Nombre;
-        cliente.Email = clienteDto.Email ?? string.Empty;
-        cliente.Telefono = clienteDto.Telefono;
-        cliente.Direccion = clienteDto.Direccion ?? string.Empty;
+        // Manejo de foto: si viene foto nueva, guardar la nueva y eliminar físicamente la anterior
+        if (request.Foto != null && request.Foto.Length > 0)
+        {
+            var validacionFoto = ValidarFoto(request.Foto);
+            if (validacionFoto != null)
+            {
+                return validacionFoto;
+            }
+
+            var nuevaFotoUrl = await GuardarArchivoFotoAsync(request.Foto);
+
+            // Eliminar físicamente foto anterior si pertenecía a /uploads/clientes/ (nunca de /seed/)
+            EliminarFotoFisicaSiCorresponde(cliente.FotoUrl);
+
+            cliente.FotoUrl = nuevaFotoUrl;
+        }
+        // Si no viene foto, conservar FotoUrl previa
+
+        cliente.Nombre = request.Nombre.Trim();
+        cliente.Email = request.Email?.Trim() ?? string.Empty;
+        cliente.Telefono = request.Telefono.Trim();
+        cliente.Direccion = request.Direccion?.Trim() ?? string.Empty;
         cliente.ActualizadoEn = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -162,5 +207,91 @@ public class ClientesController : ControllerBase
 
         return NoContent();
     }
+
+    #region Métodos Auxiliares de Foto
+
+    private IActionResult? ValidarFoto(IFormFile archivo)
+    {
+        var extension = Path.GetExtension(archivo.FileName).ToLowerInvariant();
+        if (!ExtensionesPermitidas.Contains(extension))
+        {
+            return BadRequest(new
+            {
+                codigo = "formato_foto_invalido",
+                mensaje = "El formato de la foto debe ser .jpg, .jpeg, .png o .webp."
+            });
+        }
+
+        if (archivo.Length > TamanoMaximoFotoBytes)
+        {
+            return BadRequest(new
+            {
+                codigo = "tamano_foto_excedido",
+                mensaje = "La foto no debe superar el tamaño máximo permitido de 5 MB."
+            });
+        }
+
+        return null;
+    }
+
+    private async Task<string> GuardarArchivoFotoAsync(IFormFile archivo)
+    {
+        var extension = Path.GetExtension(archivo.FileName).ToLowerInvariant();
+        var uploadsFolder = ObtenerCarpetaUploads();
+        
+        if (!Directory.Exists(uploadsFolder))
+        {
+            Directory.CreateDirectory(uploadsFolder);
+        }
+
+        var nombreUnico = $"{Guid.NewGuid():N}{extension}";
+        var rutaCompleta = Path.Combine(uploadsFolder, nombreUnico);
+
+        await using (var fileStream = new FileStream(rutaCompleta, FileMode.Create))
+        {
+            await archivo.CopyToAsync(fileStream);
+        }
+
+        return $"/uploads/clientes/{nombreUnico}";
+    }
+
+    private void EliminarFotoFisicaSiCorresponde(string? fotoUrl)
+    {
+        if (string.IsNullOrWhiteSpace(fotoUrl)) return;
+
+        // Solo eliminar si está en /uploads/clientes/, nunca de /seed/ u otras carpetas
+        if (fotoUrl.StartsWith("/uploads/clientes/", StringComparison.OrdinalIgnoreCase))
+        {
+            var nombreArchivo = Path.GetFileName(fotoUrl);
+            var rutaFisica = Path.Combine(ObtenerCarpetaUploads(), nombreArchivo);
+            if (System.IO.File.Exists(rutaFisica))
+            {
+                try
+                {
+                    System.IO.File.Delete(rutaFisica);
+                }
+                catch
+                {
+                    // Evitar que un fallo de I/O bloquee la operación
+                }
+            }
+        }
+    }
+
+    private string ObtenerCarpetaUploads()
+    {
+        var root = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        return Path.Combine(root, "uploads", "clientes");
+    }
+
+    #endregion
 }
 
+public class GuardarClienteRequest
+{
+    public string Nombre { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string Telefono { get; set; } = string.Empty;
+    public string? Direccion { get; set; }
+    public IFormFile? Foto { get; set; }
+}

@@ -64,6 +64,13 @@
           Modo oscuro
         </ion-toggle>
       </ion-item>
+
+      <ion-item>
+        <ion-icon slot="start" :icon="phonePortraitOutline" color="secondary"></ion-icon>
+        <ion-toggle :checked="tema_store.vibracion" @ionChange="cambiarVibracion($event)">
+          Vibración
+        </ion-toggle>
+      </ion-item>
     </ion-list>
 
     <!-- Sección Diagnóstico de Conexión -->
@@ -135,6 +142,7 @@ import {
 } from '@ionic/vue';
 import {
   moonOutline,
+  phonePortraitOutline,
   serverOutline,
   pulseOutline,
   syncOutline,
@@ -149,6 +157,8 @@ import { es_tema_oscuro, alternar_tema } from '@/config/tema';
 import { obtener_api_url } from '@/config/debug';
 import { productos_service } from '@/services/productos_service';
 import { sesion_store } from '@/stores/sesion_store';
+import { tema_store } from '@/stores/tema_store';
+import { vibrar_toque } from '@/services/vibracion_service';
 
 const router = useRouter();
 
@@ -173,8 +183,16 @@ const colorRolBadge = computed(() => {
   }
 });
 
-function cambiarTema() {
+async function cambiarTema() {
   esOscuro.value = alternar_tema();
+  await vibrar_toque();
+}
+
+async function cambiarVibracion(event) {
+  const nuevoValor = event?.detail !== undefined ? event.detail.checked : !tema_store.vibracion;
+  tema_store.establecer_vibracion(nuevoValor);
+  // Al presionar el switch vibra inmediatamente para confirmar la interacción
+  await vibrar_toque(true);
 }
 
 async function confirmarCerrarSesion() {
