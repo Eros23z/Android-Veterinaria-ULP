@@ -5,6 +5,8 @@ import {
   receiptOutline,
   personCircleOutline,
   shieldCheckmarkOutline,
+  bicycleOutline,
+  notificationsOutline,
 } from 'ionicons/icons';
 
 export const navegacion = [
@@ -55,6 +57,30 @@ export const navegacion = [
     roles: ['ADMIN', 'VETERINARIO'],
     menu_roles: ['ADMIN', 'VETERINARIO'],
     tab_roles: ['ADMIN', 'VETERINARIO'],
+  },
+  {
+    id: 'entregas',
+    grupo_menu: 'operacion',
+    titulo: 'Repartos y Entregas',
+    orden: 42,
+    ruta: '/app/entregas',
+    icono: bicycleOutline,
+    componente: () => import('@/views/entregas_page.vue'),
+    roles: ['ADMIN', 'VETERINARIO'],
+    menu_roles: ['ADMIN', 'VETERINARIO'],
+    tab_roles: [],
+  },
+  {
+    id: 'notificaciones',
+    grupo_menu: 'operacion',
+    titulo: 'Notificaciones',
+    orden: 44,
+    ruta: '/app/notificaciones',
+    icono: notificationsOutline,
+    componente: () => import('@/views/notificaciones_page.vue'),
+    roles: ['*'],
+    menu_roles: ['*'],
+    tab_roles: [],
   },
   {
     id: 'usuarios',

@@ -12,5 +12,9 @@ public class Pedido : EntityBase
     public EstadoPedido Estado { get; set; } = EstadoPedido.Borrador;
     public string? Notas { get; set; }
 
+    public string Tipo { get; set; } = "mostrador";
+    public long? UsuarioCreadorId { get; set; }
+    public Usuario? UsuarioCreador { get; set; }
+
     public ICollection<PedidoItem> Items { get; set; } = new List<PedidoItem>();
 }

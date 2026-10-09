@@ -70,13 +70,15 @@ export const pedidos_store = reactive({
         this.cargando = true;
         this.error = null;
         try {
-            await enviar(`/api/pedidos/${id}/estado`, 'PATCH', { estado: nuevo_estado });
+            const respuesta = await enviar(`/api/pedidos/${id}/estado`, 'PUT', { estado: nuevo_estado });
             const pedidoIndex = this.pedidos.findIndex(p => p.id === id);
             if (pedidoIndex !== -1) {
                 this.pedidos[pedidoIndex].estado = nuevo_estado;
             }
+            return respuesta;
         } catch (error) {
             this.error = error.message;
+            throw error;
         } finally {
             this.cargando = false;
         }

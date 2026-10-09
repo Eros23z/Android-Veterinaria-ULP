@@ -15,6 +15,8 @@ public class VeterinariaDbContext : DbContext
     public DbSet<Cliente> Clientes => Set<Cliente>();
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<PedidoItem> PedidoItems => Set<PedidoItem>();
+    public DbSet<Entrega> Entregas => Set<Entrega>();
+    public DbSet<Notificacion> Notificaciones => Set<Notificacion>();
     public DbSet<Rol> Roles => Set<Rol>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -52,6 +54,8 @@ public class VeterinariaDbContext : DbContext
             entity.Property(c => c.Email).HasMaxLength(150);
             entity.Property(c => c.Telefono).HasMaxLength(50);
             entity.Property(c => c.Direccion).HasMaxLength(500);
+            entity.Property(c => c.DireccionLatitud).HasPrecision(18, 6);
+            entity.Property(c => c.DireccionLongitud).HasPrecision(18, 6);
             entity.Property(c => c.FotoUrl).HasMaxLength(500);
         });
 
@@ -59,12 +63,18 @@ public class VeterinariaDbContext : DbContext
         {
             entity.HasKey(p => p.Id);
             entity.Property(p => p.Total).HasPrecision(18, 2);
+            entity.Property(p => p.Tipo).IsRequired().HasMaxLength(50).HasDefaultValue("mostrador");
             entity.Property(p => p.Notas).HasMaxLength(1000);
 
             entity.HasOne(p => p.Cliente)
                 .WithMany()
                 .HasForeignKey(p => p.ClienteId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(p => p.UsuarioCreador)
+                .WithMany()
+                .HasForeignKey(p => p.UsuarioCreadorId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<PedidoItem>(entity =>
@@ -114,6 +124,40 @@ public class VeterinariaDbContext : DbContext
             entity.HasOne(rt => rt.Usuario)
                 .WithMany(u => u.RefreshTokens)
                 .HasForeignKey(rt => rt.UsuarioId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Entrega>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DireccionLinea).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.DireccionReferencia).HasMaxLength(300);
+            entity.Property(e => e.DireccionLatitud).HasPrecision(18, 6);
+            entity.Property(e => e.DireccionLongitud).HasPrecision(18, 6);
+            entity.Property(e => e.Estado).HasConversion<string>().HasMaxLength(50);
+            entity.Property(e => e.Observaciones).HasMaxLength(500);
+
+            entity.HasOne(e => e.Pedido)
+                .WithMany()
+                .HasForeignKey(e => e.PedidoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Repartidor)
+                .WithMany()
+                .HasForeignKey(e => e.RepartidorId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Notificacion>(entity =>
+        {
+            entity.HasKey(n => n.Id);
+            entity.Property(n => n.Titulo).IsRequired().HasMaxLength(200);
+            entity.Property(n => n.Mensaje).IsRequired().HasMaxLength(1000);
+            entity.Property(n => n.Tipo).HasConversion<string>().HasMaxLength(50);
+
+            entity.HasOne(n => n.Usuario)
+                .WithMany()
+                .HasForeignKey(n => n.UsuarioId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

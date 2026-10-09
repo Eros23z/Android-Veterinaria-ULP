@@ -1,16 +1,10 @@
 <template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start">
-          <ion-menu-button></ion-menu-button>
-        </ion-buttons>
-        <ion-title>{{ titulo }}</ion-title>
-        <ion-buttons slot="end">
-          <slot name="acciones" />
-        </ion-buttons>
-      </ion-toolbar>
-    </ion-header>
+    <comp-header :titulo="titulo">
+      <template #acciones>
+        <slot name="acciones" />
+      </template>
+    </comp-header>
 
     <ion-content :fullscreen="true">
       <ion-refresher
@@ -28,15 +22,11 @@
 <script setup>
 import {
   IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonMenuButton,
   IonContent,
   IonRefresher,
   IonRefresherContent,
 } from "@ionic/vue";
+import compHeader from "./comp_header.vue";
 
 defineProps({
   titulo: { type: String, required: true },

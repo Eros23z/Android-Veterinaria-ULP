@@ -1,6 +1,9 @@
 <template>
   <comp-page titulo="Pedidos" :mostrar_actualizar="true" @actualizar="cargar">
     <template #acciones>
+      <ion-button @click="abrirNuevoPedido" title="Nuevo Pedido">
+        <ion-icon slot="icon-only" :icon="addOutline"></ion-icon>
+      </ion-button>
       <ion-button @click="ejecutarEscaneoQr" title="Escanear comprobante">
         <ion-icon slot="icon-only" :icon="qrCodeOutline"></ion-icon>
       </ion-button>
@@ -121,17 +124,47 @@
                 <p v-else class="aviso-borrador ion-text-center">
                   El comprobante solo está disponible para pedidos confirmados o superiores.
                 </p>
+
+                <!-- Botón Cambiar Estado (ADMIN o VETERINARIO) -->
+                <ion-button
+                  v-if="puedeCambiarEstado && tieneTransiciones(p.estado)"
+                  expand="block"
+                  shape="round"
+                  fill="outline"
+                  color="secondary"
+                  class="ion-margin-top"
+                  :disabled="cambiandoEstadoId === p.id"
+                  @click.stop="abrirSelectorEstado(p)"
+                >
+                  <ion-spinner v-if="cambiandoEstadoId === p.id" name="crescent" slot="start"></ion-spinner>
+                  <ion-icon v-else slot="start" :icon="swapHorizontalOutline"></ion-icon>
+                  {{ cambiandoEstadoId === p.id ? 'Actualizando estado...' : 'Cambiar estado' }}
+                </ion-button>
               </div>
             </div>
           </div>
         </ion-list>
       </template>
     </comp-lista>
+
+    <!-- Botón flotante para nuevo pedido -->
+    <ion-fab slot="fixed" vertical="bottom" horizontal="end">
+      <ion-fab-button @click="abrirNuevoPedido">
+        <ion-icon :icon="addOutline"></ion-icon>
+      </ion-fab-button>
+    </ion-fab>
+
+    <!-- Modal de creación de pedido -->
+    <modal-pedido
+      :is_open="mostrarModalPedido"
+      @cerrar="mostrarModalPedido = false"
+      @creado="onPedidoCreado"
+    />
   </comp-page>
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import {
   IonList,
   IonItem,
@@ -140,29 +173,152 @@ import {
   IonButton,
   IonIcon,
   IonSpinner,
+  IonFab,
+  IonFabButton,
   alertController,
+  actionSheetController,
 } from "@ionic/vue";
 import {
+  addOutline,
   qrCodeOutline,
   receiptOutline,
   shareSocialOutline,
   chevronDownOutline,
   chevronUpOutline,
+  swapHorizontalOutline,
+  checkmarkCircleOutline,
+  timeOutline,
+  checkmarkDoneOutline,
+  checkmarkDoneCircleOutline,
+  closeCircleOutline,
+  closeOutline,
 } from "ionicons/icons";
 import compPage from "@/components/estructura/comp_page.vue";
 import compEsqueleto from "@/components/base/comp_esqueleto.vue";
 import compBuscador from "@/components/base/comp_buscador.vue";
 import compLista from "@/components/base/comp_lista.vue";
+import modalPedido from "@/components/dominio/modal_pedido.vue";
 import { pedidos_store } from "@/stores/pedidos_store";
+import { sesion_store } from "@/stores/sesion_store";
+import { notificaciones_store } from "@/stores/notificaciones_store";
 import { qr_service } from "@/services/qr_service";
 import { compartir_service } from "@/services/compartir_service";
 import { ajax_binario } from "@/services/ajax_service";
 import { vibracion_service } from "@/services/vibracion_service";
+import { notificaciones_nativas_service } from "@/services/notificaciones_nativas_service";
 import { obtener_api_url } from "@/config/debug";
 
 const terminoBusqueda = ref("");
 const pedidoExpandidoId = ref(null);
 const compartiendoId = ref(null);
+const cambiandoEstadoId = ref(null);
+const mostrarModalPedido = ref(false);
+
+const puedeCambiarEstado = computed(() => {
+  const rol = sesion_store.rol_codigo ? String(sesion_store.rol_codigo).toUpperCase() : "";
+  return rol === "ADMIN" || rol === "VETERINARIO";
+});
+
+const TRANSICIONES_ESTADO = {
+  borrador: [
+    { estado: "confirmado", texto: "Confirmar pedido", icono: checkmarkCircleOutline },
+    { estado: "cancelado", texto: "Cancelar pedido", icono: closeCircleOutline, role: "destructive" },
+  ],
+  confirmado: [
+    { estado: "en_preparacion", texto: "Pasar a 'En preparación'", icono: timeOutline },
+    { estado: "listo", texto: "Marcar como 'Listo'", icono: checkmarkCircleOutline },
+    { estado: "cancelado", texto: "Cancelar pedido", icono: closeCircleOutline, role: "destructive" },
+  ],
+  en_preparacion: [
+    { estado: "listo", texto: "Marcar como 'Listo'", icono: checkmarkCircleOutline },
+    { estado: "cancelado", texto: "Cancelar pedido", icono: closeCircleOutline, role: "destructive" },
+  ],
+  listo: [
+    { estado: "entregado", texto: "Marcar como 'Entregado'", icono: checkmarkDoneOutline },
+    { estado: "cancelado", texto: "Cancelar pedido", icono: closeCircleOutline, role: "destructive" },
+  ],
+  entregado: [
+    { estado: "cerrado", texto: "Cerrar pedido", icono: checkmarkDoneCircleOutline },
+  ],
+  cerrado: [],
+  cancelado: [],
+};
+
+function normalizarEstado(estado) {
+  if (!estado) return "";
+  return String(estado).toLowerCase().replace(/-/g, "_").trim();
+}
+
+function obtenerTransiciones(estado) {
+  const norm = normalizarEstado(estado);
+  return TRANSICIONES_ESTADO[norm] || [];
+}
+
+function tieneTransiciones(estado) {
+  return obtenerTransiciones(estado).length > 0;
+}
+
+async function abrirSelectorEstado(pedido) {
+  await vibracion_service.vibrar_toque();
+  const transiciones = obtenerTransiciones(pedido.estado);
+  if (!transiciones || transiciones.length === 0) return;
+
+  const botones = transiciones.map((t) => ({
+    text: t.texto,
+    icon: t.icono,
+    role: t.role,
+    handler: () => {
+      ejecutarCambioEstado(pedido, t.estado);
+    },
+  }));
+
+  botones.push({
+    text: "Cancelar",
+    icon: closeOutline,
+    role: "cancel",
+  });
+
+  const sheet = await actionSheetController.create({
+    header: `Cambiar estado de ${formatearCodigo(pedido.id)}`,
+    subHeader: `Estado actual: ${formatEstado(pedido.estado)}`,
+    buttons: botones,
+  });
+
+  await sheet.present();
+}
+
+async function ejecutarCambioEstado(pedido, nuevoEstado) {
+  cambiandoEstadoId.value = pedido.id;
+  try {
+    await pedidos_store.cambiar_estado_pedido(pedido.id, nuevoEstado);
+    await vibracion_service.vibrar_toque();
+    // Actualizar campana de notificaciones para reflejar la notificación generada en backend
+    await notificaciones_store.cargar().catch(() => {});
+  } catch (error) {
+    await vibracion_service.vibrar_error();
+    const alerta = await alertController.create({
+      header: "Error al cambiar estado",
+      message: error.mensaje || error.message || "No se pudo actualizar el estado del pedido.",
+      buttons: ["Aceptar"],
+    });
+    await alerta.present();
+  } finally {
+    cambiandoEstadoId.value = null;
+  }
+}
+
+function abrirNuevoPedido() {
+  vibracion_service.vibrar_toque();
+  mostrarModalPedido.value = true;
+}
+
+async function onPedidoCreado(pedido) {
+  await notificaciones_nativas_service.notificar_evento_local(
+    "Pedido creado",
+    `${pedido.codigo} - Total: $${Number(pedido.total).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
+  );
+  await cargar();
+}
 
 function formatearCodigo(id) {
   if (!id) return "";

@@ -12,6 +12,11 @@ using Veterinaria.Api.Auth;
 using Veterinaria.Api.Data;
 using Veterinaria.Api.Domain.Entities;
 
+// Forzar cultura invariable para parseo consistente de números y coordenadas
+var culturaInvariable = System.Globalization.CultureInfo.InvariantCulture;
+System.Globalization.CultureInfo.DefaultThreadCurrentCulture = culturaInvariable;
+System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = culturaInvariable;
+
 // Configuración de licencia para QuestPDF (Unidad 6)
 QuestPDF.Settings.License = LicenseType.Community;
 

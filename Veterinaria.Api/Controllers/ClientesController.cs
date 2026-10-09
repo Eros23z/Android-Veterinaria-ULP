@@ -50,6 +50,20 @@ public class ClientesController : ControllerBase
             .OrderByDescending(c => c.CreadoEn)
             .Skip((paginaActual - 1) * tamanoActual)
             .Take(tamanoActual)
+            .Select(c => new
+            {
+                id = c.Id,
+                nombre = c.Nombre,
+                email = c.Email,
+                telefono = c.Telefono,
+                direccion = c.Direccion,
+                direccion_latitud = c.DireccionLatitud,
+                direccion_longitud = c.DireccionLongitud,
+                foto_url = c.FotoUrl,
+                activo = c.Activo,
+                creado_en = c.CreadoEn,
+                actualizado_en = c.ActualizadoEn
+            })
             .ToListAsync();
 
         var hayMas = ((paginaActual - 1) * tamanoActual) + items.Count < total;
@@ -68,7 +82,24 @@ public class ClientesController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetCliente(long id)
     {
-        var cliente = await _context.Clientes.FirstOrDefaultAsync(c => c.Id == id && c.Activo);
+        var cliente = await _context.Clientes
+            .Where(c => c.Id == id && c.Activo)
+            .Select(c => new
+            {
+                id = c.Id,
+                nombre = c.Nombre,
+                email = c.Email,
+                telefono = c.Telefono,
+                direccion = c.Direccion,
+                direccion_latitud = c.DireccionLatitud,
+                direccion_longitud = c.DireccionLongitud,
+                foto_url = c.FotoUrl,
+                activo = c.Activo,
+                creado_en = c.CreadoEn,
+                actualizado_en = c.ActualizadoEn
+            })
+            .FirstOrDefaultAsync();
+
         if (cliente == null)
         {
             return NotFound();
@@ -113,12 +144,29 @@ public class ClientesController : ControllerBase
             fotoUrl = await GuardarArchivoFotoAsync(request.Foto);
         }
 
+        string? rawLat = request.DireccionLatitud?.ToString();
+        if (string.IsNullOrWhiteSpace(rawLat) && Request.Form.TryGetValue("direccion_latitud", out var fLat))
+        {
+            rawLat = fLat.ToString();
+        }
+
+        string? rawLon = request.DireccionLongitud?.ToString();
+        if (string.IsNullOrWhiteSpace(rawLon) && Request.Form.TryGetValue("direccion_longitud", out var fLon))
+        {
+            rawLon = fLon.ToString();
+        }
+
+        decimal? latitud = ParsearYNormalizarCoordenada(rawLat, true);
+        decimal? longitud = ParsearYNormalizarCoordenada(rawLon, false);
+
         var cliente = new Cliente
         {
             Nombre = request.Nombre.Trim(),
             Email = request.Email?.Trim() ?? string.Empty,
             Telefono = request.Telefono.Trim(),
             Direccion = request.Direccion?.Trim() ?? string.Empty,
+            DireccionLatitud = latitud,
+            DireccionLongitud = longitud,
             FotoUrl = fotoUrl,
             Activo = true,
             CreadoEn = DateTime.UtcNow,
@@ -180,10 +228,27 @@ public class ClientesController : ControllerBase
         }
         // Si no viene foto, conservar FotoUrl previa
 
+        string? rawLatAct = request.DireccionLatitud?.ToString();
+        if (string.IsNullOrWhiteSpace(rawLatAct) && Request.Form.TryGetValue("direccion_latitud", out var fLatAct))
+        {
+            rawLatAct = fLatAct.ToString();
+        }
+
+        string? rawLonAct = request.DireccionLongitud?.ToString();
+        if (string.IsNullOrWhiteSpace(rawLonAct) && Request.Form.TryGetValue("direccion_longitud", out var fLonAct))
+        {
+            rawLonAct = fLonAct.ToString();
+        }
+
+        decimal? latitudAct = ParsearYNormalizarCoordenada(rawLatAct, true);
+        decimal? longitudAct = ParsearYNormalizarCoordenada(rawLonAct, false);
+
         cliente.Nombre = request.Nombre.Trim();
         cliente.Email = request.Email?.Trim() ?? string.Empty;
         cliente.Telefono = request.Telefono.Trim();
         cliente.Direccion = request.Direccion?.Trim() ?? string.Empty;
+        cliente.DireccionLatitud = latitudAct;
+        cliente.DireccionLongitud = longitudAct;
         cliente.ActualizadoEn = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -284,6 +349,25 @@ public class ClientesController : ControllerBase
         return Path.Combine(root, "uploads", "clientes");
     }
 
+    private static decimal? ParsearYNormalizarCoordenada(string? valor, bool esLatitud)
+    {
+        if (string.IsNullOrWhiteSpace(valor)) return null;
+
+        var limpio = valor.Trim().Replace(',', '.');
+        if (!decimal.TryParse(limpio, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var resultado))
+        {
+            return null;
+        }
+
+        var limite = esLatitud ? 90m : 180m;
+        while (Math.Abs(resultado) > limite && resultado != 0)
+        {
+            resultado /= 10m;
+        }
+
+        return Math.Round(resultado, 6);
+    }
+
     #endregion
 }
 
@@ -293,5 +377,12 @@ public class GuardarClienteRequest
     public string? Email { get; set; }
     public string Telefono { get; set; } = string.Empty;
     public string? Direccion { get; set; }
+
+    [FromForm(Name = "direccion_latitud")]
+    public object? DireccionLatitud { get; set; }
+
+    [FromForm(Name = "direccion_longitud")]
+    public object? DireccionLongitud { get; set; }
+
     public IFormFile? Foto { get; set; }
 }

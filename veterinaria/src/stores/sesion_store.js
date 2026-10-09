@@ -3,6 +3,7 @@ import { token_service } from '@/services/token_service';
 import { sesion_service } from '@/services/sesion_service';
 import { biometria_service } from '@/services/biometria_service';
 import { al_expirar_sesion } from '@/services/ajax_service';
+import { notificaciones_store } from '@/stores/notificaciones_store';
 
 export const sesion_store = reactive({
   usuario: null,
@@ -69,6 +70,7 @@ export const sesion_store = reactive({
     this.rol_nombre = perfil.rol_nombre || null;
     this.hay_token_guardado = true;
     this.puede_usar_huella = this.biometria_disponible && this.hay_token_guardado;
+    notificaciones_store.cargar().catch(() => {});
   },
 
   async login(email, password) {
@@ -162,6 +164,8 @@ export const sesion_store = reactive({
     this.autenticado = false;
     this.rol_codigo = null;
     this.rol_nombre = null;
+    notificaciones_store.notificaciones = [];
+    notificaciones_store.no_leidas = 0;
   },
 });
 

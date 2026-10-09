@@ -13,6 +13,21 @@ function armar_cliente_form_data(datos, foto = null) {
   formData.append('telefono', datos.telefono || '');
   formData.append('direccion', datos.direccion || '');
 
+  if (datos.direccion_latitud !== undefined && datos.direccion_latitud !== null && datos.direccion_latitud !== '') {
+    let lat = parseFloat(datos.direccion_latitud);
+    if (!isNaN(lat)) {
+      while (Math.abs(lat) > 90 && lat !== 0) lat /= 10;
+      formData.append('direccion_latitud', lat.toFixed(6));
+    }
+  }
+  if (datos.direccion_longitud !== undefined && datos.direccion_longitud !== null && datos.direccion_longitud !== '') {
+    let lng = parseFloat(datos.direccion_longitud);
+    if (!isNaN(lng)) {
+      while (Math.abs(lng) > 180 && lng !== 0) lng /= 10;
+      formData.append('direccion_longitud', lng.toFixed(6));
+    }
+  }
+
   const archivoFoto = foto || datos.foto;
   if (archivoFoto instanceof File) {
     formData.append('foto', archivoFoto);
@@ -63,6 +78,9 @@ export const clientes_service = {
   crear_cliente,
   actualizar_cliente,
   eliminar_cliente,
+  armar_form_data: armar_cliente_form_data,
 };
+
+export const armar_form_data = armar_cliente_form_data;
 
 export default clientes_service;

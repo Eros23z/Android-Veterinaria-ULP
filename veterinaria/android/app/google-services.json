@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "771866660784",
+    "project_id": "veterinaria-882dd",
+    "storage_bucket": "veterinaria-882dd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:771866660784:android:b49c96f9eea1f1bac05075",
+        "android_client_info": {
+          "package_name": "io.ionic.starter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDau24RWbflLgd0_sW4Wb6KTICQOXEFRGs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

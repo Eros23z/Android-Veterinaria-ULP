@@ -1,5 +1,6 @@
 package io.ionic.starter;
 
+import android.os.Build;
 import android.os.Bundle;
 import android.webkit.WebView;
 
@@ -10,6 +11,8 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // Habilita la depuración remota del WebView desde chrome://inspect
-        WebView.setWebContentsDebuggingEnabled(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
     }
 }

@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +7,7 @@ using QRCoder;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using Veterinaria.Api.Auth;
 using Veterinaria.Api.Data;
 using Veterinaria.Api.Domain.Entities;
 using Veterinaria.Api.Domain.Enums;
@@ -78,17 +81,195 @@ public class PedidosController : ControllerBase
         });
     }
 
-    [HttpPatch("{id}/estado")]
-    public async Task<IActionResult> CambiarEstado(long id, [FromBody] CambiarEstadoDto dto)
+    [HttpPost]
+    public async Task<IActionResult> CrearPedido([FromBody] CrearPedidoDto dto)
     {
-        var pedido = await _context.Pedidos.FindAsync(id);
-        if (pedido == null) return NotFound();
+        if (dto.ClienteId <= 0)
+        {
+            return BadRequest(new { codigo = "cliente_requerido", mensaje = "Debe especificar un cliente válido." });
+        }
 
-        pedido.Estado = dto.Estado;
-        pedido.ActualizadoEn = DateTime.UtcNow;
+        var cliente = await _context.Clientes.FirstOrDefaultAsync(c => c.Id == dto.ClienteId && c.Activo);
+        if (cliente == null)
+        {
+            return NotFound(new { codigo = "cliente_no_encontrado", mensaje = "El cliente especificado no existe o está inactivo." });
+        }
+
+        var esEntrega = string.Equals(dto.Tipo, "entrega", StringComparison.OrdinalIgnoreCase);
+        if (esEntrega && string.IsNullOrWhiteSpace(cliente.Direccion))
+        {
+            return BadRequest(new
+            {
+                codigo = "direccion_requerida",
+                mensaje = "El cliente debe tener una dirección registrada para solicitar un pedido con entrega a domicilio."
+            });
+        }
+
+        var usuarioCreadorId = User.UsuarioId();
+
+        decimal total = 0;
+        var itemsEntities = new List<PedidoItem>();
+
+        if (dto.Items != null && dto.Items.Any())
+        {
+            var productoIds = dto.Items.Select(i => i.ProductoId).Distinct().ToList();
+            var productos = await _context.Productos
+                .Where(p => productoIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id);
+
+            foreach (var itemDto in dto.Items)
+            {
+                if (itemDto.Cantidad <= 0) continue;
+                if (!productos.TryGetValue(itemDto.ProductoId, out var prod))
+                {
+                    return BadRequest(new { codigo = "producto_no_encontrado", mensaje = $"Producto #{itemDto.ProductoId} no encontrado." });
+                }
+
+                var precioUnitario = itemDto.PrecioUnitario.HasValue && itemDto.PrecioUnitario > 0
+                    ? itemDto.PrecioUnitario.Value
+                    : prod.Precio;
+
+                var subtotal = precioUnitario * itemDto.Cantidad;
+                total += subtotal;
+
+                itemsEntities.Add(new PedidoItem
+                {
+                    ProductoId = prod.Id,
+                    Cantidad = itemDto.Cantidad,
+                    PrecioUnitario = precioUnitario,
+                    Subtotal = subtotal,
+                    Activo = true,
+                    CreadoEn = DateTime.UtcNow,
+                    ActualizadoEn = DateTime.UtcNow
+                });
+            }
+        }
+
+        var pedido = new Pedido
+        {
+            ClienteId = cliente.Id,
+            Tipo = esEntrega ? "entrega" : "mostrador",
+            UsuarioCreadorId = usuarioCreadorId,
+            FechaPedido = DateTime.UtcNow,
+            Estado = EstadoPedido.Confirmado,
+            Notas = dto.Notas,
+            Total = total,
+            Items = itemsEntities,
+            Activo = true,
+            CreadoEn = DateTime.UtcNow,
+            ActualizadoEn = DateTime.UtcNow
+        };
+
+        _context.Pedidos.Add(pedido);
+
+        if (esEntrega)
+        {
+            var entrega = new Entrega
+            {
+                Pedido = pedido,
+                DireccionLinea = cliente.Direccion,
+                DireccionReferencia = null,
+                DireccionLatitud = cliente.DireccionLatitud,
+                DireccionLongitud = cliente.DireccionLongitud,
+                Estado = EstadoEntrega.Pendiente,
+                Activo = true,
+                CreadoEn = DateTime.UtcNow,
+                ActualizadoEn = DateTime.UtcNow
+            };
+            _context.Entregas.Add(entrega);
+        }
 
         await _context.SaveChangesAsync();
-        return NoContent();
+
+        var codigoTexto = $"PED-{pedido.Id:D4}";
+
+        return CreatedAtAction(nameof(GetPedidos), new { id = pedido.Id }, new
+        {
+            id = pedido.Id,
+            codigo = codigoTexto,
+            tipo = pedido.Tipo,
+            cliente_id = pedido.ClienteId,
+            cliente_nombre = cliente.Nombre,
+            total = pedido.Total,
+            estado = pedido.Estado.ToString().ToLowerInvariant(),
+            mensaje = "Pedido registrado correctamente."
+        });
+    }
+
+    [HttpPatch("{id}/estado")]
+    [HttpPut("{id}/estado")]
+    public async Task<IActionResult> CambiarEstado(long id, [FromBody] CambiarEstadoDto dto)
+    {
+        var nuevoEstado = dto?.ObtenerEstadoEnum();
+        if (!nuevoEstado.HasValue)
+        {
+            return BadRequest(new
+            {
+                codigo = "estado_invalido",
+                mensaje = "El estado especificado no es válido."
+            });
+        }
+
+        var pedido = await _context.Pedidos
+            .Include(p => p.Cliente)
+            .FirstOrDefaultAsync(p => p.Id == id);
+        if (pedido == null)
+        {
+            return NotFound(new
+            {
+                codigo = "pedido_no_encontrado",
+                mensaje = "El pedido no fue encontrado."
+            });
+        }
+
+        var estadoAnterior = pedido.Estado;
+        pedido.Estado = nuevoEstado.Value;
+        pedido.ActualizadoEn = DateTime.UtcNow;
+
+        var usuarioActualId = User.UsuarioId();
+        var destinatarioId = pedido.UsuarioCreadorId ?? usuarioActualId;
+
+        if (destinatarioId.HasValue)
+        {
+            string nombreOperador = User.FindFirst(ClaimTypes.Name)?.Value
+                ?? User.FindFirst(ClaimTypes.Email)?.Value
+                ?? User.FindFirst("email")?.Value
+                ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(nombreOperador) && usuarioActualId.HasValue)
+            {
+                var op = await _context.Usuarios.FindAsync(usuarioActualId.Value);
+                if (op != null && !string.IsNullOrWhiteSpace(op.Email))
+                {
+                    nombreOperador = op.Email;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(nombreOperador))
+            {
+                nombreOperador = "Un operador";
+            }
+
+            var notificacion = new Notificacion
+            {
+                UsuarioId = destinatarioId.Value,
+                Titulo = $"Pedido PED-{pedido.Id:D4} actualizado",
+                Mensaje = $"{nombreOperador} cambió el pedido a {nuevoEstado.Value}.",
+                Tipo = TipoNotificacion.Pedido,
+                Activo = true,
+                CreadoEn = DateTime.UtcNow,
+                ActualizadoEn = DateTime.UtcNow
+            };
+            _context.Notificaciones.Add(notificacion);
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(new
+        {
+            id = pedido.Id,
+            estado = pedido.Estado.ToString().ToLowerInvariant(),
+            mensaje = $"Estado actualizado a {nuevoEstado.Value}."
+        });
     }
 
     [HttpGet("{id}/comprobante")]
@@ -268,5 +449,41 @@ public class PedidosController : ControllerBase
 
 public class CambiarEstadoDto
 {
-    public EstadoPedido Estado { get; set; }
+    public JsonElement? Estado { get; set; }
+
+    public EstadoPedido? ObtenerEstadoEnum()
+    {
+        if (!Estado.HasValue) return null;
+        if (Estado.Value.ValueKind == JsonValueKind.Number && Estado.Value.TryGetInt32(out var intVal))
+        {
+            if (Enum.IsDefined(typeof(EstadoPedido), intVal))
+                return (EstadoPedido)intVal;
+        }
+        if (Estado.Value.ValueKind == JsonValueKind.String)
+        {
+            var str = Estado.Value.GetString()?.Trim();
+            if (string.IsNullOrWhiteSpace(str)) return null;
+            var limpio = str.Replace("_", "");
+            if (Enum.TryParse<EstadoPedido>(limpio, true, out var res))
+                return res;
+            if (Enum.TryParse<EstadoPedido>(str, true, out var res2))
+                return res2;
+        }
+        return null;
+    }
+}
+
+public class CrearPedidoDto
+{
+    public long ClienteId { get; set; }
+    public string? Tipo { get; set; } = "mostrador";
+    public string? Notas { get; set; }
+    public List<CrearPedidoItemDto> Items { get; set; } = new();
+}
+
+public class CrearPedidoItemDto
+{
+    public long ProductoId { get; set; }
+    public int Cantidad { get; set; }
+    public decimal? PrecioUnitario { get; set; }
 }

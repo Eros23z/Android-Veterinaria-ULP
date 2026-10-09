@@ -91,6 +91,55 @@
         <ion-label position="stacked">Dirección</ion-label>
         <ion-input v-model="form.direccion" type="text" placeholder="Calle y número"></ion-input>
       </ion-item>
+
+      <!-- Bloque Ubicación GPS (Unidad 7) -->
+      <div class="bloque-ubicacion ion-margin-top ion-padding">
+        <div class="cabecera-ubicacion">
+          <ion-icon :icon="locationOutline" color="primary" class="icono-ubicacion"></ion-icon>
+          <span class="titulo-ubicacion">Ubicación y Georreferencia</span>
+        </div>
+
+        <div v-if="tieneCoordenadas" class="info-coordenadas ion-margin-top">
+          <p class="texto-coordenadas">
+            <strong>Latitud:</strong> {{ parseFloat(form.direccion_latitud).toFixed(6) }}<br />
+            <strong>Longitud:</strong> {{ parseFloat(form.direccion_longitud).toFixed(6) }}
+          </p>
+          <div class="acciones-coordenadas ion-margin-top">
+            <ion-button size="small" fill="outline" shape="round" color="danger" @click="quitarUbicacion">
+              <ion-icon slot="start" :icon="trashOutline"></ion-icon>
+              Quitar
+            </ion-button>
+            <a
+              :href="urlMapaPreview"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="boton-enlace-mapa"
+            >
+              <ion-icon :icon="mapOutline"></ion-icon>
+              <span>Ver en mapa</span>
+            </a>
+          </div>
+        </div>
+
+        <div v-else class="sin-coordenadas-bloque ion-margin-top">
+          <p class="texto-sin-coordenadas">
+            Sin coordenadas asignadas actualmente.
+          </p>
+
+          <ion-button
+            expand="block"
+            fill="outline"
+            shape="round"
+            class="ion-margin-top"
+            :disabled="capturandoUbicacion"
+            @click="capturarUbicacion"
+          >
+            <ion-spinner v-if="capturandoUbicacion" name="crescent" slot="start"></ion-spinner>
+            <ion-icon v-else slot="start" :icon="navigateOutline"></ion-icon>
+            {{ capturandoUbicacion ? 'Obteniendo GPS...' : 'Estoy en la puerta del cliente' }}
+          </ion-button>
+        </div>
+      </div>
       
       <ion-button expand="block" class="ion-margin-top" shape="round" @click="guardar" :disabled="guardando">
         {{ guardando ? 'Guardando...' : (cliente?.id ? 'Actualizar Cliente' : 'Crear Cliente') }}
@@ -114,6 +163,7 @@ import {
   IonInput,
   IonNote,
   IonIcon,
+  IonSpinner,
 } from '@ionic/vue';
 import {
   cameraOutline,
@@ -121,9 +171,13 @@ import {
   trashOutline,
   personCircleOutline,
   alertCircleOutline,
+  locationOutline,
+  navigateOutline,
+  mapOutline,
 } from 'ionicons/icons';
 import { crear_cliente, actualizar_cliente } from '@/services/clientes_service';
 import { camara_service } from '@/services/camara_service';
+import { geolocalizacion_service } from '@/services/geolocalizacion_service';
 import { vibrar_toque, vibrar_error } from '@/services/vibracion_service';
 import { obtener_api_url } from '@/config/debug';
 
@@ -139,7 +193,11 @@ const form = ref({
   email: '',
   telefono: '',
   direccion: '',
+  direccion_latitud: null,
+  direccion_longitud: null,
 });
+
+const capturandoUbicacion = ref(false);
 
 const fotoArchivo = ref(null);
 const previewLocal = ref(null);
@@ -162,6 +220,17 @@ const urlFotoActual = computed(() => {
   return null;
 });
 
+function normalizarCoordenada(val, esLatitud = true) {
+  if (val == null || val === '') return null;
+  let num = parseFloat(val);
+  if (isNaN(num)) return null;
+  const limite = esLatitud ? 90 : 180;
+  while (Math.abs(num) > limite && num !== 0) {
+    num /= 10;
+  }
+  return Number(num.toFixed(6));
+}
+
 watch(
   () => props.cliente,
   (nuevo_cliente) => {
@@ -177,6 +246,8 @@ watch(
         email: nuevo_cliente.email || '',
         telefono: nuevo_cliente.telefono || '',
         direccion: nuevo_cliente.direccion || '',
+        direccion_latitud: normalizarCoordenada(nuevo_cliente.direccion_latitud, true),
+        direccion_longitud: normalizarCoordenada(nuevo_cliente.direccion_longitud, false),
       };
     } else {
       form.value = {
@@ -184,19 +255,88 @@ watch(
         email: '',
         telefono: '',
         direccion: '',
+        direccion_latitud: null,
+        direccion_longitud: null,
       };
     }
   },
   { immediate: true },
 );
 
+const tieneCoordenadas = computed(() => {
+  if (form.value.direccion_latitud == null || form.value.direccion_longitud == null) return false;
+  const lat = parseFloat(form.value.direccion_latitud);
+  const lng = parseFloat(form.value.direccion_longitud);
+  return !isNaN(lat) && !isNaN(lng);
+});
+
+const urlMapaPreview = computed(() => {
+  return geolocalizacion_service.url_mapa(
+    form.value.direccion_latitud,
+    form.value.direccion_longitud,
+    form.value.direccion
+  );
+});
+
+async function capturarUbicacion() {
+  error_mensaje.value = null;
+  capturandoUbicacion.value = true;
+  try {
+    const res = await geolocalizacion_service.obtener_ubicacion_actual();
+    if (res.ok && res.ubicacion) {
+      await vibrar_toque();
+      form.value.direccion_latitud = normalizarCoordenada(res.ubicacion.latitud, true);
+      form.value.direccion_longitud = normalizarCoordenada(res.ubicacion.longitud, false);
+    } else {
+      await vibrar_error();
+      error_mensaje.value = res.mensaje || 'No se pudo obtener la ubicación actual.';
+    }
+  } catch (err) {
+    await vibrar_error();
+    error_mensaje.value = err.message || 'Error al obtener GPS.';
+  } finally {
+    capturandoUbicacion.value = false;
+  }
+}
+
+async function quitarUbicacion() {
+  await vibrar_toque();
+  form.value.direccion_latitud = null;
+  form.value.direccion_longitud = null;
+}
+
 watch(
   () => props.is_open,
   (abierto) => {
     if (abierto) {
       error_mensaje.value = null;
+      fotoArchivo.value = null;
+      previewLocal.value = null;
+      fotoEliminada.value = false;
+
+      if (props.cliente && props.cliente.id) {
+        form.value = {
+          id: props.cliente.id,
+          nombre: props.cliente.nombre || '',
+          email: props.cliente.email || '',
+          telefono: props.cliente.telefono || '',
+          direccion: props.cliente.direccion || '',
+          direccion_latitud: normalizarCoordenada(props.cliente.direccion_latitud, true),
+          direccion_longitud: normalizarCoordenada(props.cliente.direccion_longitud, false),
+        };
+      } else {
+        form.value = {
+          nombre: '',
+          email: '',
+          telefono: '',
+          direccion: '',
+          direccion_latitud: null,
+          direccion_longitud: null,
+        };
+      }
     }
   },
+  { immediate: true }
 );
 
 async function capturarFoto(origen) {
@@ -321,5 +461,57 @@ const guardar = async () => {
 
 .icono-error {
   font-size: 20px;
+}
+
+.bloque-ubicacion {
+  background: var(--ion-color-step-50, #f8f9fa);
+  border: 1px solid var(--ion-color-step-150, #e2e8f0);
+  border-radius: 12px;
+}
+
+.cabecera-ubicacion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icono-ubicacion {
+  font-size: 20px;
+}
+
+.titulo-ubicacion {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ion-color-step-850, #1e293b);
+}
+
+.texto-coordenadas {
+  font-family: monospace;
+  font-size: 0.9rem;
+  margin: 0;
+  color: var(--ion-color-step-700, #334155);
+}
+
+.acciones-coordenadas {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.boton-enlace-mapa {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  color: var(--ion-color-primary, #3880ff);
+  font-weight: 600;
+}
+
+.texto-sin-coordenadas {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--ion-color-medium, #92949c);
+  margin: 0;
 }
 </style>
