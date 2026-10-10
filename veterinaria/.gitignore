@@ -40,3 +40,8 @@ npm-debug.log*
 /platforms
 /plugins
 /www
+
+# Android Keystore and Release Secrets
+*.jks
+*.keystore
+keystore.properties

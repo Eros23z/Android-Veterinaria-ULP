@@ -1,6 +1,7 @@
 import { obtener_api_url } from '@/config/debug';
 import { token_service } from './token_service';
 import { vibrar_error } from './vibracion_service';
+import { guardar_copia, obtener_copia } from './copia_local_service';
 
 const TIEMPO_ESPERA_DEFECTO_MS = 8000;
 
@@ -64,10 +65,10 @@ async function renovar_tokens_servidor(baseUrl, refreshToken) {
 
 /**
  * Normaliza y ejecuta peticiones HTTP usando fetch con control de timeout, inyección de token,
- * soporte de FormData multipart y renovación automática ante 401.
+ * soporte de FormData multipart, renovación automática ante 401 y soporte de copia offline guardable.
  *
  * @param {string} ruta - Endpoint relativo (ej: '/api/productos') o URL absoluta.
- * @param {RequestInit & { timeoutMs?: number }} opciones - Opciones de fetch y configuración adicional.
+ * @param {RequestInit & { timeoutMs?: number, guardable?: boolean }} opciones - Opciones de fetch y configuración adicional.
  * @param {boolean} esReintento - Bandera interna para evitar bucles de renovación.
  * @returns {Promise<any>} Datos parseados de la respuesta.
  */
@@ -78,6 +79,7 @@ export async function peticion_ajax(ruta, opciones = {}, esReintento = false) {
     : `${baseUrl}${ruta.startsWith('/') ? '' : '/'}${ruta}`;
 
   const timeoutMs = opciones.timeoutMs || TIEMPO_ESPERA_DEFECTO_MS;
+  const guardable = opciones.guardable === true;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -156,20 +158,45 @@ export async function peticion_ajax(ruta, opciones = {}, esReintento = false) {
     }
 
     const contentType = respuesta.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      return await respuesta.json();
+    const datosRespuesta = contentType && contentType.includes('application/json')
+      ? await respuesta.json()
+      : await respuesta.text();
+
+    if (guardable) {
+      guardar_copia(ruta, datosRespuesta);
     }
-    return await respuesta.text();
+
+    return datosRespuesta;
   } catch (error) {
     clearTimeout(timeoutId);
+
+    // Si es falla de red y la petición es guardable, intentar resolver con copia local sin error
+    const esFallaRed = error.name === 'AbortError' ||
+                       error.name === 'TypeError' ||
+                       error.status === 0 ||
+                       error.message?.includes('Failed to fetch') ||
+                       error.message?.includes('NetworkError') ||
+                       error.message?.includes('conexión');
+
+    if (guardable && esFallaRed) {
+      const copia = obtener_copia(ruta);
+      if (copia !== null && copia !== undefined) {
+        return copia;
+      }
+    }
+
     vibrar_error();
 
     if (error.name === 'AbortError') {
-      throw new Error(`Tiempo de espera agotado (${timeoutMs / 1000}s) al contactar al servidor.`);
+      const errTimeout = new Error(`Tiempo de espera agotado (${timeoutMs / 1000}s) al contactar al servidor.`);
+      errTimeout.status = 0;
+      throw errTimeout;
     }
 
     if (error.message?.includes('Failed to fetch') || error.name === 'TypeError') {
-      throw new Error(`No se pudo establecer conexión con el servidor (${baseUrl}). Verifique la red y que la API esté activa.`);
+      const errRed = new Error(`No se pudo establecer conexión con el servidor (${baseUrl}). Verifique la red y que la API esté activa.`);
+      errRed.status = 0;
+      throw errRed;
     }
 
     throw error;
@@ -234,9 +261,13 @@ export const ajax_service = {
 
 /**
  * Función genérica de envío con soporte automático para JSON y FormData (multipart).
+ * @param {string} endpoint
+ * @param {string} metodo
+ * @param {any} datos
+ * @param {object} opcionesExtra
  */
-export async function enviar(endpoint, metodo = 'GET', datos = null) {
-  const opciones = { method: metodo };
+export async function enviar(endpoint, metodo = 'GET', datos = null, opcionesExtra = {}) {
+  const opciones = { method: metodo, ...opcionesExtra };
   if (datos && (metodo === 'POST' || metodo === 'PUT' || metodo === 'PATCH')) {
     if (typeof FormData !== 'undefined' && datos instanceof FormData) {
       opciones.body = datos;
@@ -247,7 +278,21 @@ export async function enviar(endpoint, metodo = 'GET', datos = null) {
   return peticion_ajax(endpoint, opciones);
 }
 
-// Alias pedir para compatibilidad de nomenclatura
-export const pedir = enviar;
+/**
+ * Petición genérica con soporte para opciones de lectura offline (guardable).
+ * @param {string} endpoint
+ * @param {object|string} opcionesOmetodo
+ * @param {any} datos
+ * @param {object} extra
+ */
+export function pedir(endpoint, opcionesOmetodo = 'GET', datos = null, extra = {}) {
+  if (typeof opcionesOmetodo === 'object' && opcionesOmetodo !== null) {
+    const opts = opcionesOmetodo;
+    const metodo = opts.method || 'GET';
+    const body = opts.body || opts.datos || null;
+    return enviar(endpoint, metodo, body, opts);
+  }
+  return enviar(endpoint, opcionesOmetodo, datos, extra);
+}
 
 export default ajax_service;

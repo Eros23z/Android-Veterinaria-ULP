@@ -3,6 +3,8 @@ import { token_service } from '@/services/token_service';
 import { sesion_service } from '@/services/sesion_service';
 import { biometria_service } from '@/services/biometria_service';
 import { al_expirar_sesion } from '@/services/ajax_service';
+import { borrar_copias } from '@/services/copia_local_service';
+import { offline_store } from '@/stores/offline_store';
 import { notificaciones_store } from '@/stores/notificaciones_store';
 
 export const sesion_store = reactive({
@@ -119,6 +121,8 @@ export const sesion_store = reactive({
       return true;
     } catch (error) {
       await token_service.limpiar_tokens();
+      borrar_copias();
+      offline_store.limpiar_cola();
       this.hay_token_guardado = false;
       this.puede_usar_huella = false;
       this._limpiar_estado();
@@ -136,6 +140,8 @@ export const sesion_store = reactive({
       }
     } finally {
       await token_service.limpiar_tokens();
+      borrar_copias();
+      offline_store.limpiar_cola();
       this.hay_token_guardado = false;
       this.puede_usar_huella = false;
       this._limpiar_estado();
@@ -173,6 +179,8 @@ export const sesion_store = reactive({
 al_expirar_sesion(async () => {
   sesion_store.hay_token_guardado = false;
   sesion_store.puede_usar_huella = false;
+  borrar_copias();
+  offline_store.limpiar_cola();
   sesion_store._limpiar_estado();
   try {
     const routerModule = await import('@/router');

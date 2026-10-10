@@ -1,18 +1,12 @@
-/**
- * Configuración de red para entorno de desarrollo y depuración.
- * Lee la variable de entorno VITE_API_URL_DEBUG o recurre a un fallback seguro.
- */
+const api_url_produccion = 'https://veterinaria-ulp.runasp.net';
 
-const URL_FALLBACK = 'http://localhost:5080';
+export const debug_config = {
+  debug_activado: import.meta.env.VITE_DEBUG_ACTIVADO != 'false',
+  api_url_debug: (import.meta.env.VITE_API_URL_DEBUG || 'http://localhost:5080').replace(/\/+$/, '')
+};
 
 export function obtener_api_url() {
-  const envUrl =
-    typeof import.meta !== 'undefined' && import.meta.env
-      ? import.meta.env.VITE_API_URL_DEBUG
-      : undefined;
-
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
-    return envUrl.trim().replace(/\/+$/, '');
-  }
-  return URL_FALLBACK;
+  const api_url_entorno = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+  if (debug_config.debug_activado) return debug_config.api_url_debug;
+  return api_url_entorno || api_url_produccion;
 }

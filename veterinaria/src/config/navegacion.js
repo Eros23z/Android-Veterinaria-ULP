@@ -21,6 +21,7 @@ export const navegacion = [
     roles: ['*'],
     menu_roles: ['*'],
     tab_roles: ['*'],
+    sin_red: true,
   },
   {
     id: 'productos',
@@ -57,6 +58,7 @@ export const navegacion = [
     roles: ['ADMIN', 'VETERINARIO'],
     menu_roles: ['ADMIN', 'VETERINARIO'],
     tab_roles: ['ADMIN', 'VETERINARIO'],
+    sin_red: true,
   },
   {
     id: 'entregas',
@@ -105,5 +107,6 @@ export const navegacion = [
     roles: ['*'],
     menu_roles: ['*'],
     tab_roles: ['*'],
+    sin_red: true,
   },
-];
+];

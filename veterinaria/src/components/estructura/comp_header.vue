@@ -10,9 +10,9 @@
       <ion-buttons slot="end">
         <slot name="acciones" />
 
-        <!-- Botón de Notificaciones con Badge de no leídas condicionado por sesión activa -->
+        <!-- Botón de Notificaciones con Badge de no leídas condicionado por sesión activa y conectividad -->
         <ion-button
-          v-if="sesion_store.autenticado"
+          v-if="sesion_store.autenticado && !offline_store.sin_conexion"
           class="boton-campana"
           @click="irANotificaciones"
           title="Notificaciones"
@@ -45,6 +45,7 @@ import {
 import { notificationsOutline } from 'ionicons/icons';
 import { useRouter } from 'vue-router';
 import { sesion_store } from '@/stores/sesion_store';
+import { offline_store } from '@/stores/offline_store';
 import { notificaciones_store } from '@/stores/notificaciones_store';
 
 defineProps({

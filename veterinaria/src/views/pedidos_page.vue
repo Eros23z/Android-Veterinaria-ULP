@@ -1,16 +1,27 @@
 <template>
   <comp-page titulo="Pedidos" :mostrar_actualizar="true" @actualizar="cargar">
     <template #acciones>
-      <ion-button @click="abrirNuevoPedido" title="Nuevo Pedido">
+      <ion-button v-if="!offline_store.sin_conexion" @click="abrirNuevoPedido" title="Nuevo Pedido">
         <ion-icon slot="icon-only" :icon="addOutline"></ion-icon>
       </ion-button>
-      <ion-button @click="ejecutarEscaneoQr" title="Escanear comprobante">
+      <ion-button v-if="!offline_store.sin_conexion" @click="ejecutarEscaneoQr" title="Escanear comprobante">
         <ion-icon slot="icon-only" :icon="qrCodeOutline"></ion-icon>
       </ion-button>
     </template>
 
-    <!-- Barra de búsqueda y acceso directo a escaneo de QR -->
-    <div class="ion-padding-horizontal ion-padding-top seccion-acciones-superiores">
+    <!-- Banner informativo de Modo Offline -->
+    <div v-if="offline_store.sin_conexion" class="banner-aviso-offline ion-padding">
+      <div class="contenido-aviso-offline">
+        <ion-icon :icon="cloudOfflineOutline" class="icono-aviso-offline"></ion-icon>
+        <div class="texto-aviso-offline">
+          <strong>Sin conexión</strong>
+          <p>Estás viendo los datos guardados. Podés cambiar el estado de un pedido; se envía solo cuando vuelva la red.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barra de búsqueda y acceso directo a escaneo de QR (ocultos sin red) -->
+    <div v-if="!offline_store.sin_conexion" class="ion-padding-horizontal ion-padding-top seccion-acciones-superiores">
       <ion-button
         expand="block"
         shape="round"
@@ -24,6 +35,7 @@
     </div>
 
     <comp-buscador
+      v-if="!offline_store.sin_conexion"
       placeholder="Buscar pedidos o cliente..."
       @buscar="onBuscar"
     />
@@ -69,6 +81,9 @@
               </ion-label>
 
               <div slot="end" class="bloque-estado-acciones">
+                <ion-badge v-if="p.sin_enviar" color="warning" class="badge-sin-enviar">
+                  Sin enviar
+                </ion-badge>
                 <ion-badge :color="obtenerColorEstado(p.estado)">
                   {{ formatEstado(p.estado) }}
                 </ion-badge>
@@ -80,7 +95,7 @@
               </div>
             </ion-item>
 
-            <!-- Sección Expandida con detalles, Código QR y Compartir PDF -->
+            <!-- Sección Expandida con detalles y acciones -->
             <div v-if="pedidoExpandidoId === p.id" class="seccion-expandida ion-padding">
               <!-- Información de items del pedido -->
               <div v-if="p.items && p.items.length > 0" class="items-pedido-tabla">
@@ -95,8 +110,8 @@
                 <p><em>Observaciones: {{ p.notas }}</em></p>
               </div>
 
-              <!-- Imagen del Código QR del pedido -->
-              <div class="contenedor-qr ion-margin-top ion-text-center">
+              <!-- Imagen del Código QR del pedido (oculto si está sin red) -->
+              <div v-if="!offline_store.sin_conexion" class="contenedor-qr ion-margin-top ion-text-center">
                 <img
                   :src="resolverQrUrl(p.id)"
                   alt="Código QR del pedido"
@@ -106,26 +121,29 @@
                 <p class="instruccion-qr">Código verificable para escaneo clínico</p>
               </div>
 
-              <!-- Botón Compartir Comprobante (solo pedidos confirmados o superiores) -->
+              <!-- Acciones de comprobante y cambio de estado -->
               <div class="botones-accion ion-margin-top">
-                <ion-button
-                  v-if="puedeImprimirComprobante(p.estado)"
-                  expand="block"
-                  shape="round"
-                  color="primary"
-                  :disabled="compartiendoId === p.id"
-                  @click.stop="ejecutarCompartirComprobante(p)"
-                >
-                  <ion-spinner v-if="compartiendoId === p.id" name="crescent" slot="start"></ion-spinner>
-                  <ion-icon v-else slot="start" :icon="shareSocialOutline"></ion-icon>
-                  {{ compartiendoId === p.id ? 'Descargando comprobante...' : 'Compartir comprobante' }}
-                </ion-button>
+                <!-- Botón Compartir Comprobante (oculto sin red) -->
+                <template v-if="!offline_store.sin_conexion">
+                  <ion-button
+                    v-if="puedeImprimirComprobante(p.estado)"
+                    expand="block"
+                    shape="round"
+                    color="primary"
+                    :disabled="compartiendoId === p.id"
+                    @click.stop="ejecutarCompartirComprobante(p)"
+                  >
+                    <ion-spinner v-if="compartiendoId === p.id" name="crescent" slot="start"></ion-spinner>
+                    <ion-icon v-else slot="start" :icon="shareSocialOutline"></ion-icon>
+                    {{ compartiendoId === p.id ? 'Descargando comprobante...' : 'Compartir comprobante' }}
+                  </ion-button>
 
-                <p v-else class="aviso-borrador ion-text-center">
-                  El comprobante solo está disponible para pedidos confirmados o superiores.
-                </p>
+                  <p v-else class="aviso-borrador ion-text-center">
+                    El comprobante solo está disponible para pedidos confirmados o superiores.
+                  </p>
+                </template>
 
-                <!-- Botón Cambiar Estado (ADMIN o VETERINARIO) -->
+                <!-- Botón Cambiar Estado (ADMIN o VETERINARIO) - Activo tanto online como offline -->
                 <ion-button
                   v-if="puedeCambiarEstado && tieneTransiciones(p.estado)"
                   expand="block"
@@ -147,8 +165,8 @@
       </template>
     </comp-lista>
 
-    <!-- Botón flotante para nuevo pedido -->
-    <ion-fab slot="fixed" vertical="bottom" horizontal="end">
+    <!-- Botón flotante para nuevo pedido (oculto sin red) -->
+    <ion-fab v-if="!offline_store.sin_conexion" slot="fixed" vertical="bottom" horizontal="end">
       <ion-fab-button @click="abrirNuevoPedido">
         <ion-icon :icon="addOutline"></ion-icon>
       </ion-fab-button>
@@ -192,6 +210,7 @@ import {
   checkmarkDoneCircleOutline,
   closeCircleOutline,
   closeOutline,
+  cloudOfflineOutline,
 } from "ionicons/icons";
 import compPage from "@/components/estructura/comp_page.vue";
 import compEsqueleto from "@/components/base/comp_esqueleto.vue";
@@ -199,6 +218,7 @@ import compBuscador from "@/components/base/comp_buscador.vue";
 import compLista from "@/components/base/comp_lista.vue";
 import modalPedido from "@/components/dominio/modal_pedido.vue";
 import { pedidos_store } from "@/stores/pedidos_store";
+import { offline_store } from "@/stores/offline_store";
 import { sesion_store } from "@/stores/sesion_store";
 import { notificaciones_store } from "@/stores/notificaciones_store";
 import { qr_service } from "@/services/qr_service";
@@ -290,10 +310,12 @@ async function abrirSelectorEstado(pedido) {
 async function ejecutarCambioEstado(pedido, nuevoEstado) {
   cambiandoEstadoId.value = pedido.id;
   try {
-    await pedidos_store.cambiar_estado_pedido(pedido.id, nuevoEstado);
+    const res = await pedidos_store.cambiar_estado_pedido(pedido.id, nuevoEstado);
     await vibracion_service.vibrar_toque();
-    // Actualizar campana de notificaciones para reflejar la notificación generada en backend
-    await notificaciones_store.cargar().catch(() => {});
+    if (!offline_store.sin_conexion) {
+      // Actualizar campana de notificaciones para reflejar la notificación generada en backend
+      await notificaciones_store.cargar().catch(() => {});
+    }
   } catch (error) {
     await vibracion_service.vibrar_error();
     const alerta = await alertController.create({
@@ -366,7 +388,7 @@ function obtenerColorEstado(estado) {
 
 async function cargar(event = null) {
   pedidos_store.reiniciar_paginacion();
-  await pedidos_store.cargar_pedidos({ busqueda: terminoBusqueda.value });
+  await pedidos_store.cargar_pedidos({ busqueda: offline_store.sin_conexion ? "" : terminoBusqueda.value });
   if (event?.target?.complete) {
     event.target.complete();
   }
@@ -472,6 +494,39 @@ onMounted(() => cargar());
 </script>
 
 <style scoped>
+.banner-aviso-offline {
+  background: var(--ion-color-warning-tint, #fff3cd);
+  border-left: 4px solid var(--ion-color-warning, #ffc409);
+  margin: 12px 16px;
+  border-radius: 8px;
+}
+
+.contenido-aviso-offline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.icono-aviso-offline {
+  font-size: 28px;
+  color: var(--ion-color-warning-shade, #e0ac08);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.texto-aviso-offline strong {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--ion-color-warning-shade, #856404);
+}
+
+.texto-aviso-offline p {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  color: var(--ion-color-step-800, #333333);
+}
+
 .seccion-acciones-superiores {
   margin-bottom: -0.5rem;
 }
@@ -503,6 +558,13 @@ onMounted(() => cargar());
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
+}
+
+.badge-sin-enviar {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .icono-chevron {

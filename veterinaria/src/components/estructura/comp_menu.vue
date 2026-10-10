@@ -7,37 +7,41 @@
     </ion-header>
     <ion-content>
       <ion-list>
-        <ion-list-header>Operación</ion-list-header>
-        <ion-menu-toggle
-          :auto-hide="false"
-          v-for="item in operacion"
-          :key="item.id"
-        >
-          <ion-item
-            :router-link="item.ruta"
-            router-direction="root"
-            lines="none"
+        <template v-if="operacion.length > 0">
+          <ion-list-header>Operación</ion-list-header>
+          <ion-menu-toggle
+            :auto-hide="false"
+            v-for="item in operacion"
+            :key="item.id"
           >
-            <ion-icon slot="start" :icon="item.icono"></ion-icon>
-            <ion-label>{{ item.titulo }}</ion-label>
-          </ion-item>
-        </ion-menu-toggle>
+            <ion-item
+              :router-link="item.ruta"
+              router-direction="root"
+              lines="none"
+            >
+              <ion-icon slot="start" :icon="item.icono"></ion-icon>
+              <ion-label>{{ item.titulo }}</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+        </template>
 
-        <ion-list-header>Configuración</ion-list-header>
-        <ion-menu-toggle
-          :auto-hide="false"
-          v-for="item in configuracion"
-          :key="item.id"
-        >
-          <ion-item
-            :router-link="item.ruta"
-            router-direction="root"
-            lines="none"
+        <template v-if="configuracion.length > 0">
+          <ion-list-header>Configuración</ion-list-header>
+          <ion-menu-toggle
+            :auto-hide="false"
+            v-for="item in configuracion"
+            :key="item.id"
           >
-            <ion-icon slot="start" :icon="item.icono"></ion-icon>
-            <ion-label>{{ item.titulo }}</ion-label>
-          </ion-item>
-        </ion-menu-toggle>
+            <ion-item
+              :router-link="item.ruta"
+              router-direction="root"
+              lines="none"
+            >
+              <ion-icon slot="start" :icon="item.icono"></ion-icon>
+              <ion-label>{{ item.titulo }}</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+        </template>
       </ion-list>
     </ion-content>
   </ion-menu>
@@ -60,6 +64,7 @@ import {
 } from "@ionic/vue";
 import { navegacion } from "@/config/navegacion";
 import { sesion_store } from "@/stores/sesion_store";
+import { offline_store } from "@/stores/offline_store";
 
 defineProps({
   content_id: { type: String, required: true },
@@ -70,16 +75,19 @@ const operacion = computed(() =>
     .filter(
       (item) =>
         item.grupo_menu === "operacion" &&
-        sesion_store.tiene_rol(item.menu_roles),
+        sesion_store.tiene_rol(item.menu_roles) &&
+        (!offline_store.sin_conexion || item.sin_red === true),
     )
     .sort((a, b) => a.orden - b.orden),
 );
+
 const configuracion = computed(() =>
   navegacion
     .filter(
       (item) =>
         item.grupo_menu === "configuracion" &&
-        sesion_store.tiene_rol(item.menu_roles),
+        sesion_store.tiene_rol(item.menu_roles) &&
+        (!offline_store.sin_conexion || item.sin_red === true),
     )
     .sort((a, b) => a.orden - b.orden),
 );

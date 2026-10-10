@@ -2,11 +2,15 @@ import { createRouter, createWebHistory } from '@ionic/vue-router';
 import main_layout from '@/layouts/main_layout.vue';
 import { navegacion } from '@/config/navegacion.js';
 import { sesion_store } from '@/stores/sesion_store';
+import { offline_store } from '@/stores/offline_store';
 
-const rutas_app = navegacion.map(item => ({
+const rutas_app = navegacion.map((item) => ({
   path: item.ruta.replace('/app/', ''),
   name: item.id,
   component: item.componente,
+  meta: {
+    sin_red: item.sin_red === true,
+  },
 }));
 
 const routes = [
@@ -58,8 +62,13 @@ router.beforeEach(async (to, from, next) => {
       return next('/login');
     }
 
+    // Si no hay conexión y la ruta de destino no permite modo sin red, redirigir a inicio
+    if (offline_store.sin_conexion && !to.meta?.sin_red && to.path !== '/app/inicio') {
+      return next('/app/inicio');
+    }
+
     // Comprobar si la ruta exige roles específicos
-    const navItem = navegacion.find(n => n.ruta === to.path);
+    const navItem = navegacion.find((n) => n.ruta === to.path);
     if (navItem && navItem.roles && !sesion_store.tiene_rol(navItem.roles)) {
       return next('/app/inicio');
     }
