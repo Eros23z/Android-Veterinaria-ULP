@@ -11,6 +11,7 @@ using QuestPDF.Infrastructure;
 using Veterinaria.Api.Auth;
 using Veterinaria.Api.Data;
 using Veterinaria.Api.Domain.Entities;
+using Veterinaria.Api.Push;
 
 // Forzar cultura invariable para parseo consistente de números y coordenadas
 var culturaInvariable = System.Globalization.CultureInfo.InvariantCulture;
@@ -39,9 +40,11 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
     });
 
-// Inyección de servicios de autenticación y seguridad
+// Inyección de servicios de autenticación, seguridad y notificaciones push (Unidad 9)
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IPasswordHasher<Usuario>, PasswordHasher<Usuario>>();
+builder.Services.AddSingleton<EnvioPush>();
+builder.Services.AddScoped<PushAlGuardar>();
 
 // Configuración de Autenticación con JWT Bearer
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "ClaveEfimeraVeterinariaSanRoque2026SuperSeguraDesarrollo12345!";
@@ -126,21 +129,22 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Configuración de DbContext con SQL Server y convenciones snake_case
+// Configuración de DbContext con SQL Server, convenciones snake_case e interceptor Push (Unidad 9)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Server=.\\SQLEXPRESS;Database=VeterinariaDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true";
 
-builder.Services.AddDbContext<VeterinariaDbContext>(options =>
+builder.Services.AddDbContext<VeterinariaDbContext>((servicios, options) =>
 {
     options.UseSqlServer(connectionString)
-           .UseSnakeCaseNamingConvention();
+           .UseSnakeCaseNamingConvention()
+           .AddInterceptors(servicios.GetRequiredService<PushAlGuardar>());
 });
 
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Aplicar migraciones y reemplazo seguro de credenciales del administrador (Unidad 8)
+// Aplicar migraciones y reemplazo seguro de credenciales del administrador y usuarios de prueba (Unidades 8 y 9)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<VeterinariaDbContext>();
@@ -148,12 +152,14 @@ using (var scope = app.Services.CreateScope())
     {
         await db.Database.MigrateAsync();
 
+        var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<Usuario>>();
+
+        // Sincronización de Administrador principal
         if (adminPassword.Length >= 8)
         {
             var adminUser = await db.Usuarios.FirstOrDefaultAsync(u => u.Email == "admin@veterinaria.local");
             if (adminUser != null)
             {
-                var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<Usuario>>();
                 var verifyResult = hasher.VerifyHashedPassword(adminUser, adminUser.PasswordHash, adminPassword);
                 if (verifyResult != PasswordVerificationResult.Success)
                 {
@@ -162,6 +168,31 @@ using (var scope = app.Services.CreateScope())
                     await db.SaveChangesAsync();
                 }
             }
+        }
+
+        // Sincronización de Cuentas de Prueba operativas (Unidad 9)
+        var testPassword = builder.Configuration["UsuariosDePrueba:Password"] ?? string.Empty;
+        if (testPassword.Length >= 8)
+        {
+            var cuentasPrueba = new[] { "admin@veterinaria.local", "veterinario@veterinaria.local" };
+            var usuariosPrueba = await db.Usuarios.Where(u => cuentasPrueba.Contains(u.Email)).ToListAsync();
+
+            foreach (var usuario in usuariosPrueba)
+            {
+                // Si es admin y ya se actualizó con adminPassword específica, preservarlo
+                if (usuario.Email == "admin@veterinaria.local" && adminPassword.Length >= 8)
+                {
+                    continue;
+                }
+
+                var verify = hasher.VerifyHashedPassword(usuario, usuario.PasswordHash, testPassword);
+                if (verify != PasswordVerificationResult.Success)
+                {
+                    usuario.PasswordHash = hasher.HashPassword(usuario, testPassword);
+                    usuario.ActualizadoEn = DateTime.UtcNow;
+                }
+            }
+            await db.SaveChangesAsync();
         }
     }
     catch (Exception ex)

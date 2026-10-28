@@ -24,6 +24,7 @@ export function con_cambios_sin_enviar(pedido) {
 
 export const pedidos_store = reactive({
   pedidos: [],
+  resumen: {},
   pedido_actual: null,
   paginacion: { pagina: 1, tamano: 10, total: 0, hay_mas: false },
   busqueda: '',
@@ -53,6 +54,10 @@ export const pedidos_store = reactive({
         this.pedidos = itemsMapeados;
       } else {
         this.pedidos = [...this.pedidos, ...itemsMapeados];
+      }
+
+      if (respuesta.resumen || respuesta.conteos) {
+        this.resumen = { ...this.resumen, ...(respuesta.resumen || respuesta.conteos) };
       }
 
       this.paginacion = {
@@ -106,6 +111,9 @@ export const pedidos_store = reactive({
     this.cargando = true;
     this.error = null;
     try {
+      const pedidoExistente = this.pedidos.find((p) => String(p.id) === String(id));
+      const estadoAnterior = pedidoExistente ? pedidoExistente.estado : null;
+
       if (offline_store.sin_conexion) {
         offline_store.encolar(id, nuevo_estado);
 
@@ -120,6 +128,7 @@ export const pedidos_store = reactive({
           this.pedido_actual.sin_enviar = true;
         }
 
+        this.actualizar_conteo_resumen(estadoAnterior, nuevo_estado);
         return 'pendiente';
       }
 
@@ -135,12 +144,25 @@ export const pedidos_store = reactive({
         this.pedido_actual.sin_enviar = false;
       }
 
+      this.actualizar_conteo_resumen(estadoAnterior, nuevo_estado);
       return respuesta;
     } catch (error) {
       this.error = error.message;
       throw error;
     } finally {
       this.cargando = false;
+    }
+  },
+
+  actualizar_conteo_resumen(estadoAnterior, nuevoEstado) {
+    if (!this.resumen || Object.keys(this.resumen).length === 0) return;
+    const anterior = estadoAnterior ? String(estadoAnterior).toLowerCase().replace(/-/g, '_') : null;
+    const nuevo = nuevoEstado ? String(nuevoEstado).toLowerCase().replace(/-/g, '_') : null;
+    if (anterior && this.resumen[anterior] > 0) {
+      this.resumen[anterior]--;
+    }
+    if (nuevo && this.resumen[nuevo] !== undefined) {
+      this.resumen[nuevo]++;
     }
   },
 

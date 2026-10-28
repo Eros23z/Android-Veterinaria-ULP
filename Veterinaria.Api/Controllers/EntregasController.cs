@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -242,15 +243,31 @@ public class EntregasController : ControllerBase
             }
         }
 
-        // Al pasar a Entregada o Cancelada, emitir Notificacion al creador del pedido
+        // Al pasar a Entregada o Cancelada, emitir Notificacion al creador del pedido (evitando auto-notificaciones)
+        var usuarioActualId = User.UsuarioId();
         if ((dto.Estado == EstadoEntrega.Entregada || dto.Estado == EstadoEntrega.Cancelada) &&
-            entrega.Pedido?.UsuarioCreadorId.HasValue == true)
+            entrega.Pedido?.UsuarioCreadorId.HasValue == true &&
+            entrega.Pedido.UsuarioCreadorId.Value != usuarioActualId)
         {
+            var nombreEjecutor = await _context.Usuarios
+                .Where(u => u.Id == usuarioActualId)
+                .Select(u => u.Email)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrWhiteSpace(nombreEjecutor))
+            {
+                nombreEjecutor = User.UsuarioEmail()
+                    ?? User.FindFirst(ClaimTypes.Name)?.Value
+                    ?? User.FindFirst(ClaimTypes.Email)?.Value
+                    ?? User.FindFirst("email")?.Value
+                    ?? "Un repartidor";
+            }
+
             var notificacion = new Notificacion
             {
-                UsuarioId = entrega.Pedido.UsuarioCreadorId.Value,
+                UsuarioId = entrega.Pedido.UsuarioCreadorId.Value, // Destinatario obligatorio: el creador del pedido
                 Titulo = $"Entrega PED-{entrega.PedidoId:D4} {dto.Estado}",
-                Mensaje = $"La entrega del pedido PED-{entrega.PedidoId:D4} ha sido marcada como '{dto.Estado}'.",
+                Mensaje = $"{nombreEjecutor} marcó la entrega del pedido PED-{entrega.PedidoId:D4} como '{dto.Estado}'.",
                 Tipo = TipoNotificacion.Entrega,
                 Activo = true,
                 CreadoEn = DateTime.UtcNow,

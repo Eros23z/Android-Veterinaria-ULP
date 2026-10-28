@@ -175,6 +175,8 @@ public class SesionController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Logout([FromBody] LogoutDto dto)
     {
+        long? usuarioId = User.UsuarioId();
+
         if (!string.IsNullOrWhiteSpace(dto.RefreshToken))
         {
             var hash = TokenService.CalcularHashSha256(dto.RefreshToken.Trim());
@@ -183,11 +185,38 @@ public class SesionController : ControllerBase
 
             if (tokenExistente != null)
             {
+                usuarioId ??= tokenExistente.UsuarioId;
                 tokenExistente.RevocadoEn = DateTimeOffset.UtcNow;
                 tokenExistente.ActualizadoEn = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
             }
         }
+
+        // Manejo de desvinculación de dispositivos push
+        if (usuarioId.HasValue && dto.Todos)
+        {
+            var dispositivosUsuario = await _context.DispositivosPush
+                .Where(d => d.UsuarioId == usuarioId.Value)
+                .ToListAsync();
+
+            if (dispositivosUsuario.Count > 0)
+            {
+                _context.DispositivosPush.RemoveRange(dispositivosUsuario);
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(dto.TokenPush))
+        {
+            var tokenLimpio = dto.TokenPush.Trim();
+            var dispositivos = await _context.DispositivosPush
+                .Where(d => d.Token == tokenLimpio && (!usuarioId.HasValue || d.UsuarioId == usuarioId.Value))
+                .ToListAsync();
+
+            if (dispositivos.Count > 0)
+            {
+                _context.DispositivosPush.RemoveRange(dispositivos);
+            }
+        }
+
+        await _context.SaveChangesAsync();
 
         return Ok(new { mensaje = "Sesión cerrada correctamente." });
     }
@@ -239,4 +268,6 @@ public class RefreshDto
 public class LogoutDto
 {
     public string? RefreshToken { get; set; }
+    public string? TokenPush { get; set; }
+    public bool Todos { get; set; } = false;
 }

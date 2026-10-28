@@ -34,9 +34,28 @@ import '@ionic/vue/css/palettes/dark.class.css';
 
 /* Theme variables */
 import './theme/variables.css';
+import './theme/global.css';
 import { aplicar_tema_guardado } from './config/tema';
+import { use_notificaciones_store } from '@/stores/notificaciones_store';
+import { use_sesion_store } from '@/stores/sesion_store';
+import { inicializar_notificaciones_nativas } from '@/services/notificaciones_nativas_service';
 
 aplicar_tema_guardado();
+
+inicializar_notificaciones_nativas({
+  al_registrar: () => use_sesion_store().vincular_dispositivo(),
+  al_recibir: () => {
+    if (use_sesion_store().autenticado) {
+      use_notificaciones_store().cargar();
+    }
+  },
+  al_tocar: (datos: any) => {
+    const codigo = datos?.pedido_codigo;
+    if (codigo) {
+      router.push(`/app/pedidos?buscar=${encodeURIComponent(codigo)}`);
+    }
+  },
+});
 
 const app = createApp(App)
   .use(IonicVue)

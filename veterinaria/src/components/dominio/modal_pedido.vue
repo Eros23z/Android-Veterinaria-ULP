@@ -1,5 +1,5 @@
 <template>
-  <ion-modal :is-open="is_open" @didDismiss="cerrar">
+  <ion-modal :is-open="is_open" class="vet-modal-flotante" @didDismiss="cerrar">
     <ion-header>
       <ion-toolbar color="primary">
         <ion-title>Nuevo Pedido</ion-title>
@@ -146,12 +146,22 @@
         <span class="total-monto">${{ Number(totalGeneral).toLocaleString('es-AR', { minimumFractionDigits: 2 }) }}</span>
       </div>
 
+      <!-- Banner de validación si faltan datos obligatorios -->
+      <div class="ion-margin-top">
+        <comp-aviso
+          v-if="!formularioValido"
+          tono="advertencia"
+          titulo="Datos requeridos para el pedido"
+          :mensaje="mensajeCamposFaltantes"
+        />
+      </div>
+
       <!-- Botón de Confirmación -->
       <ion-button
         expand="block"
         shape="round"
         class="ion-margin-top ion-margin-bottom"
-        :disabled="guardando || form.items.length === 0 || !form.cliente_id"
+        :disabled="guardando || !formularioValido"
         @click="guardarPedido"
       >
         <ion-spinner v-if="guardando" name="crescent" slot="start"></ion-spinner>
@@ -194,6 +204,7 @@ import {
 import { enviar } from '@/services/ajax_service';
 import { vibrar_toque, vibrar_error } from '@/services/vibracion_service';
 import { formatear_coordenadas } from '@/services/geolocalizacion_service';
+import compAviso from '@/components/base/comp_aviso.vue';
 
 const props = defineProps({
   is_open: { type: Boolean, required: true },
@@ -219,6 +230,32 @@ const clienteSeleccionado = computed(() => {
 
 const totalGeneral = computed(() => {
   return form.value.items.reduce((acc, curr) => acc + (Number(curr.subtotal) || 0), 0);
+});
+
+const camposFaltantes = computed(() => {
+  const faltantes = [];
+  if (!form.value.cliente_id) {
+    faltantes.push('Seleccionar un cliente');
+  }
+  if (!form.value.items || form.value.items.length === 0) {
+    faltantes.push('Agregar al menos un producto');
+  } else {
+    const itemsSinProducto = form.value.items.some((it) => !it.producto_id);
+    if (itemsSinProducto) {
+      faltantes.push('Seleccionar producto en cada fila');
+    }
+  }
+  if (form.value.tipo === 'entrega' && clienteSeleccionado.value && !clienteSeleccionado.value.direccion) {
+    faltantes.push('El cliente debe poseer dirección registrada para entrega a domicilio');
+  }
+  return faltantes;
+});
+
+const formularioValido = computed(() => camposFaltantes.value.length === 0);
+
+const mensajeCamposFaltantes = computed(() => {
+  if (camposFaltantes.value.length === 0) return '';
+  return `Para confirmar el pedido: ${camposFaltantes.value.join('; ')}.`;
 });
 
 async function cargarCatalogos() {

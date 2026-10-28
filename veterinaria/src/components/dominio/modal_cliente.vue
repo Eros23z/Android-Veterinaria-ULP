@@ -1,5 +1,5 @@
 <template>
-  <ion-modal :is-open="is_open" @didDismiss="cerrar">
+  <ion-modal :is-open="is_open" class="vet-modal-flotante" @didDismiss="cerrar">
     <ion-header>
       <ion-toolbar color="primary">
         <ion-title>{{ cliente?.id ? 'Editar Cliente' : 'Nuevo Cliente' }}</ion-title>
@@ -140,8 +140,23 @@
           </ion-button>
         </div>
       </div>
-      
-      <ion-button expand="block" class="ion-margin-top" shape="round" @click="guardar" :disabled="guardando">
+      <!-- Banner de validación si faltan datos obligatorios -->
+      <div class="ion-margin-top">
+        <comp-aviso
+          v-if="!formularioValido"
+          tono="advertencia"
+          titulo="Datos obligatorios incompletos"
+          :mensaje="mensajeCamposFaltantes"
+        />
+      </div>
+
+      <ion-button
+        expand="block"
+        class="ion-margin-top"
+        shape="round"
+        @click="guardar"
+        :disabled="guardando || !formularioValido"
+      >
         {{ guardando ? 'Guardando...' : (cliente?.id ? 'Actualizar Cliente' : 'Crear Cliente') }}
       </ion-button>
     </ion-content>
@@ -180,6 +195,7 @@ import { camara_service } from '@/services/camara_service';
 import { geolocalizacion_service } from '@/services/geolocalizacion_service';
 import { vibrar_toque, vibrar_error } from '@/services/vibracion_service';
 import { obtener_api_url } from '@/config/debug';
+import compAviso from '@/components/base/comp_aviso.vue';
 
 const props = defineProps({
   is_open: { type: Boolean, required: true },
@@ -195,6 +211,24 @@ const form = ref({
   direccion: '',
   direccion_latitud: null,
   direccion_longitud: null,
+});
+
+const camposFaltantes = computed(() => {
+  const faltantes = [];
+  if (!form.value.nombre || !form.value.nombre.trim()) {
+    faltantes.push('Nombre completo');
+  }
+  if (!form.value.telefono || !form.value.telefono.trim()) {
+    faltantes.push('Teléfono de contacto');
+  }
+  return faltantes;
+});
+
+const formularioValido = computed(() => camposFaltantes.value.length === 0);
+
+const mensajeCamposFaltantes = computed(() => {
+  if (camposFaltantes.value.length === 0) return '';
+  return `Completá los siguientes campos para continuar: ${camposFaltantes.value.join(', ')}.`;
 });
 
 const capturandoUbicacion = ref(false);

@@ -8,8 +8,12 @@ export async function refresh(refreshToken) {
   return await enviar('/api/sesion/refresh', 'POST', { refresh_token: refreshToken });
 }
 
-export async function logout(refreshToken) {
-  return await enviar('/api/sesion/logout', 'POST', { refresh_token: refreshToken });
+export async function logout(refreshToken, tokenPush = null, todos = false) {
+  return await enviar('/api/sesion/logout', 'POST', {
+    refresh_token: refreshToken,
+    token_push: tokenPush,
+    todos: todos,
+  });
 }
 
 /**

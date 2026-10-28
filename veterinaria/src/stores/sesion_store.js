@@ -6,6 +6,7 @@ import { al_expirar_sesion } from '@/services/ajax_service';
 import { borrar_copias } from '@/services/copia_local_service';
 import { offline_store } from '@/stores/offline_store';
 import { notificaciones_store } from '@/stores/notificaciones_store';
+import { vincular_dispositivo, obtener_token_push } from '@/services/notificaciones_nativas_service';
 
 export const sesion_store = reactive({
   usuario: null,
@@ -73,6 +74,7 @@ export const sesion_store = reactive({
     this.hay_token_guardado = true;
     this.puede_usar_huella = this.biometria_disponible && this.hay_token_guardado;
     notificaciones_store.cargar().catch(() => {});
+    vincular_dispositivo().catch(() => {});
   },
 
   async login(email, password) {
@@ -134,9 +136,11 @@ export const sesion_store = reactive({
 
   async logout() {
     const refreshToken = token_service.obtener_refresh_token();
+    const tokenPush = obtener_token_push();
+
     try {
-      if (refreshToken) {
-        await sesion_service.logout(refreshToken).catch(() => {});
+      if (refreshToken || tokenPush) {
+        await sesion_service.logout(refreshToken, tokenPush).catch(() => {});
       }
     } finally {
       await token_service.limpiar_tokens();
@@ -163,6 +167,10 @@ export const sesion_store = reactive({
     if (rolesPermitidos.includes('*')) return true;
     if (!this.rol_codigo) return false;
     return rolesPermitidos.includes(this.rol_codigo);
+  },
+
+  async vincular_dispositivo(token = null) {
+    return await vincular_dispositivo(token);
   },
 
   _limpiar_estado() {
@@ -193,4 +201,5 @@ al_expirar_sesion(async () => {
   }
 });
 
+export const use_sesion_store = () => sesion_store;
 export default sesion_store;

@@ -17,6 +17,7 @@ public class VeterinariaDbContext : DbContext
     public DbSet<PedidoItem> PedidoItems => Set<PedidoItem>();
     public DbSet<Entrega> Entregas => Set<Entrega>();
     public DbSet<Notificacion> Notificaciones => Set<Notificacion>();
+    public DbSet<DispositivoPush> DispositivosPush => Set<DispositivoPush>();
     public DbSet<Rol> Roles => Set<Rol>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -158,6 +159,18 @@ public class VeterinariaDbContext : DbContext
             entity.HasOne(n => n.Usuario)
                 .WithMany()
                 .HasForeignKey(n => n.UsuarioId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DispositivoPush>(entity =>
+        {
+            entity.HasKey(d => d.Id);
+            entity.Property(d => d.Token).IsRequired().HasMaxLength(512);
+            entity.HasIndex(d => d.Token).IsUnique();
+
+            entity.HasOne(d => d.Usuario)
+                .WithMany()
+                .HasForeignKey(d => d.UsuarioId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

@@ -127,6 +127,50 @@ namespace Veterinaria.Api.Migrations
                     b.ToTable("clientes", (string)null);
                 });
 
+            modelBuilder.Entity("Veterinaria.Api.Domain.Entities.DispositivoPush", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit")
+                        .HasColumnName("activo");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("creado_en");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
+                        .HasColumnName("token");
+
+                    b.Property<long>("UsuarioId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_dispositivos_push");
+
+                    b.HasIndex("Token")
+                        .IsUnique()
+                        .HasDatabaseName("ix_dispositivos_push_token");
+
+                    b.HasIndex("UsuarioId")
+                        .HasDatabaseName("ix_dispositivos_push_usuario_id");
+
+                    b.ToTable("dispositivos_push", (string)null);
+                });
+
             modelBuilder.Entity("Veterinaria.Api.Domain.Entities.Entrega", b =>
                 {
                     b.Property<long>("Id")
@@ -590,6 +634,18 @@ namespace Veterinaria.Api.Migrations
                         .HasDatabaseName("ix_usuarios_rol_id");
 
                     b.ToTable("usuarios", (string)null);
+                });
+
+            modelBuilder.Entity("Veterinaria.Api.Domain.Entities.DispositivoPush", b =>
+                {
+                    b.HasOne("Veterinaria.Api.Domain.Entities.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_dispositivos_push_usuarios_usuario_id");
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("Veterinaria.Api.Domain.Entities.Entrega", b =>

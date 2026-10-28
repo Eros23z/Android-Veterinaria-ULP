@@ -26,12 +26,30 @@ public class PedidosController : ControllerBase
         _context = context;
     }
 
+    public static bool TryParseEstado(string? valor, out EstadoPedido estado)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            estado = default;
+            return false;
+        }
+        var limpio = valor.Replace("_", "").Trim();
+        if (int.TryParse(limpio, out var num) && Enum.IsDefined(typeof(EstadoPedido), num))
+        {
+            estado = (EstadoPedido)num;
+            return true;
+        }
+        return Enum.TryParse<EstadoPedido>(limpio, ignoreCase: true, out estado);
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetPedidos(
         [FromQuery] string? busqueda,
-        [FromQuery] EstadoPedido? estado,
+        [FromQuery] string? estado,
+        [FromQuery] string? estados,
         [FromQuery] int? pagina,
-        [FromQuery] int? tamano)
+        [FromQuery] int? tamano,
+        CancellationToken cancellationToken = default)
     {
         var paginaActual = pagina.GetValueOrDefault(1);
         var tamanoActual = tamano.GetValueOrDefault(10);
@@ -39,29 +57,71 @@ public class PedidosController : ControllerBase
         if (paginaActual < 1) paginaActual = 1;
         if (tamanoActual < 1) tamanoActual = 10;
 
-        var query = _context.Pedidos
-            .Include(p => p.Cliente)
-            .Include(p => p.Items)
-            .ThenInclude(i => i.Producto)
-            .AsQueryable();
+        var consultaBase = _context.Pedidos.AsNoTracking().Where(p => p.Activo);
 
-        if (estado.HasValue)
-        {
-            query = query.Where(p => p.Estado == estado.Value);
-        }
-
+        // 1. Filtros generales (por ejemplo búsqueda de texto o cliente/notas/id)
         if (!string.IsNullOrWhiteSpace(busqueda))
         {
-            query = query.Where(p => (p.Notas != null && p.Notas.Contains(busqueda)) || (p.Cliente != null && p.Cliente.Nombre.Contains(busqueda)));
+            var b = busqueda.Trim();
+            var bNumero = b.StartsWith("PED-", StringComparison.OrdinalIgnoreCase) ? b[4..].TrimStart('0') : b;
+            consultaBase = consultaBase.Where(p =>
+                p.Id.ToString().Contains(b) ||
+                (bNumero.Length > 0 && p.Id.ToString().Contains(bNumero)) ||
+                (p.Notas != null && p.Notas.Contains(b)) ||
+                (p.Cliente != null && p.Cliente.Nombre.Contains(b)));
         }
-        
-        var total = await query.CountAsync();
-        
-        var items = await query
+
+        // 2. CONTEOS PARA EL RESUMEN: se calculan sobre consultaBase (sin filtrar por estado aún)
+        var conteos = await consultaBase
+            .GroupBy(x => x.Estado)
+            .Select(g => new { Estado = g.Key, Cantidad = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var resumen = Enum.GetValues<EstadoPedido>()
+            .ToDictionary(
+                e => JsonNamingPolicy.SnakeCaseLower.ConvertName(e.ToString()),
+                e => conteos.FirstOrDefault(c => c.Estado == e)?.Cantidad ?? 0
+            );
+
+        var totalGeneral = conteos.Sum(c => c.Cantidad);
+        resumen["todos"] = totalGeneral;
+
+        // 3. RECIÉN AHORA se aplica el filtro de estado para la lista paginada
+        var consultaLista = consultaBase;
+        var estadoParam = !string.IsNullOrWhiteSpace(estado) ? estado : estados;
+        if (!string.IsNullOrWhiteSpace(estadoParam))
+        {
+            var partes = estadoParam.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var estadosFiltrar = new List<EstadoPedido>();
+            foreach (var parte in partes)
+            {
+                if (TryParseEstado(parte, out var e) && !estadosFiltrar.Contains(e))
+                {
+                    estadosFiltrar.Add(e);
+                }
+            }
+
+            if (estadosFiltrar.Count == 1)
+            {
+                var unico = estadosFiltrar[0];
+                consultaLista = consultaLista.Where(x => x.Estado == unico);
+            }
+            else if (estadosFiltrar.Count > 1)
+            {
+                consultaLista = consultaLista.Where(x => estadosFiltrar.Contains(x.Estado));
+            }
+        }
+
+        var total = await consultaLista.CountAsync(cancellationToken);
+
+        var items = await consultaLista
+            .Include(p => p.Cliente)
+            .Include(p => p.Items)
+                .ThenInclude(i => i.Producto)
             .OrderByDescending(p => p.FechaPedido)
             .Skip((paginaActual - 1) * tamanoActual)
             .Take(tamanoActual)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var hayMas = ((paginaActual - 1) * tamanoActual) + items.Count < total;
 
@@ -77,6 +137,8 @@ public class PedidosController : ControllerBase
         {
             pedidos = items,
             items = items,
+            resumen = resumen,
+            conteos = resumen,
             pagina = paginaResponse
         });
     }
@@ -227,34 +289,29 @@ public class PedidosController : ControllerBase
         pedido.ActualizadoEn = DateTime.UtcNow;
 
         var usuarioActualId = User.UsuarioId();
-        var destinatarioId = pedido.UsuarioCreadorId ?? usuarioActualId;
 
-        if (destinatarioId.HasValue)
+        // 1. Evitar auto-notificaciones: validar que tenga un creador y que NO sea el usuario actual
+        if (pedido.UsuarioCreadorId.HasValue && pedido.UsuarioCreadorId.Value != usuarioActualId)
         {
-            string nombreOperador = User.FindFirst(ClaimTypes.Name)?.Value
-                ?? User.FindFirst(ClaimTypes.Email)?.Value
-                ?? User.FindFirst("email")?.Value
-                ?? string.Empty;
+            var nombreEjecutor = await _context.Usuarios
+                .Where(u => u.Id == usuarioActualId)
+                .Select(u => u.Email)
+                .FirstOrDefaultAsync();
 
-            if (string.IsNullOrWhiteSpace(nombreOperador) && usuarioActualId.HasValue)
+            if (string.IsNullOrWhiteSpace(nombreEjecutor))
             {
-                var op = await _context.Usuarios.FindAsync(usuarioActualId.Value);
-                if (op != null && !string.IsNullOrWhiteSpace(op.Email))
-                {
-                    nombreOperador = op.Email;
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(nombreOperador))
-            {
-                nombreOperador = "Un operador";
+                nombreEjecutor = User.UsuarioEmail()
+                    ?? User.FindFirst(ClaimTypes.Name)?.Value
+                    ?? User.FindFirst(ClaimTypes.Email)?.Value
+                    ?? User.FindFirst("email")?.Value
+                    ?? "Un operador";
             }
 
             var notificacion = new Notificacion
             {
-                UsuarioId = destinatarioId.Value,
+                UsuarioId = pedido.UsuarioCreadorId.Value, // Destinatario obligatorio: el creador del pedido
                 Titulo = $"Pedido PED-{pedido.Id:D4} actualizado",
-                Mensaje = $"{nombreOperador} cambió el pedido a {nuevoEstado.Value}.",
+                Mensaje = $"{nombreEjecutor} cambió el pedido a {nuevoEstado.Value}.",
                 Tipo = TipoNotificacion.Pedido,
                 Activo = true,
                 CreadoEn = DateTime.UtcNow,
@@ -461,13 +518,9 @@ public class CambiarEstadoDto
         }
         if (Estado.Value.ValueKind == JsonValueKind.String)
         {
-            var str = Estado.Value.GetString()?.Trim();
-            if (string.IsNullOrWhiteSpace(str)) return null;
-            var limpio = str.Replace("_", "");
-            if (Enum.TryParse<EstadoPedido>(limpio, true, out var res))
+            var str = Estado.Value.GetString();
+            if (PedidosController.TryParseEstado(str, out var res))
                 return res;
-            if (Enum.TryParse<EstadoPedido>(str, true, out var res2))
-                return res2;
         }
         return null;
     }

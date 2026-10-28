@@ -95,4 +95,5 @@ export const notificaciones_store = reactive({
   },
 });
 
+export const use_notificaciones_store = () => notificaciones_store;
 export default notificaciones_store;
