@@ -24,8 +24,10 @@
       <ion-item
         v-for="item in productos_store.productos"
         :key="item.id"
+        button="true"
         lines="inset"
         class="item-producto"
+        @click="abrirModal(item)"
       >
         <ion-thumbnail slot="start" class="miniatura-producto">
           <img :src="resolverUrlImagen(item.imagen_url)" :alt="item.nombre" />
@@ -57,24 +59,65 @@
         </ion-badge>
       </ion-item>
     </ion-list>
+
+    <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+      <ion-fab-button @click="abrirModal(null)" title="Nuevo producto">
+        <ion-icon :icon="add"></ion-icon>
+      </ion-fab-button>
+    </ion-fab>
+
+    <modal-producto
+      :is_open="modalAbierto"
+      :producto="productoSeleccionado"
+      @cerrar="modalAbierto = false"
+      @guardado="onProductoGuardado"
+    />
   </comp-page>
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import {
   IonList,
   IonItem,
   IonLabel,
   IonBadge,
   IonThumbnail,
+  IonFab,
+  IonFabButton,
+  IonIcon,
 } from '@ionic/vue';
+import { add } from 'ionicons/icons';
 import CompPage from '@/components/estructura/comp_page.vue';
 import CompEsqueleto from '@/components/base/comp_esqueleto.vue';
 import CompEstadoError from '@/components/base/comp_estado_error.vue';
 import CompEstadoVacio from '@/components/base/comp_estado_vacio.vue';
+import ModalProducto from '@/components/dominio/modal_producto.vue';
 import { productos_store } from '@/stores/productos_store';
 import { obtener_api_url } from '@/config/debug';
+
+const modalAbierto = ref(false);
+const productoSeleccionado = ref(null);
+
+function abrirModal(producto = null) {
+  productoSeleccionado.value = producto;
+  modalAbierto.value = true;
+}
+
+function onProductoGuardado(nuevo) {
+  if (nuevo.id) {
+    const idx = productos_store.productos.findIndex(p => p.id === nuevo.id);
+    if (idx !== -1) {
+      productos_store.productos[idx] = { ...productos_store.productos[idx], ...nuevo };
+    }
+  } else {
+    productos_store.productos.unshift({
+      ...nuevo,
+      id: Date.now(),
+      categoria: 'General',
+    });
+  }
+}
 
 function resolverUrlImagen(imagenUrl) {
   if (!imagenUrl) {

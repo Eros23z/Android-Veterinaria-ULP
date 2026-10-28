@@ -89,10 +89,13 @@
       </ion-item>
       <ion-item>
         <ion-label position="stacked">Dirección</ion-label>
-        <ion-input v-model="form.direccion" type="text" placeholder="Calle y número"></ion-input>
+        <div class="fila-input-dictado">
+          <ion-input v-model="form.direccion" type="text" placeholder="Calle y número"></ion-input>
+          <comp-dictado-boton :valor="form.direccion" @actualizar="form.direccion = $event" />
+        </div>
       </ion-item>
 
-      <!-- Bloque Ubicación GPS (Unidad 7) -->
+      <!-- Bloque Ubicación GPS y Mapa (Unidad 7 y 10) -->
       <div class="bloque-ubicacion ion-margin-top ion-padding">
         <div class="cabecera-ubicacion">
           <ion-icon :icon="locationOutline" color="primary" class="icono-ubicacion"></ion-icon>
@@ -105,6 +108,10 @@
             <strong>Longitud:</strong> {{ parseFloat(form.direccion_longitud).toFixed(6) }}
           </p>
           <div class="acciones-coordenadas ion-margin-top">
+            <ion-button size="small" fill="outline" shape="round" color="primary" @click="mapa_abierto = true">
+              <ion-icon slot="start" :icon="mapOutline"></ion-icon>
+              Corregir en el mapa
+            </ion-button>
             <ion-button size="small" fill="outline" shape="round" color="danger" @click="quitarUbicacion">
               <ion-icon slot="start" :icon="trashOutline"></ion-icon>
               Quitar
@@ -126,18 +133,31 @@
             Sin coordenadas asignadas actualmente.
           </p>
 
-          <ion-button
-            expand="block"
-            fill="outline"
-            shape="round"
-            class="ion-margin-top"
-            :disabled="capturandoUbicacion"
-            @click="capturarUbicacion"
-          >
-            <ion-spinner v-if="capturandoUbicacion" name="crescent" slot="start"></ion-spinner>
-            <ion-icon v-else slot="start" :icon="navigateOutline"></ion-icon>
-            {{ capturandoUbicacion ? 'Obteniendo GPS...' : 'Estoy en la puerta del cliente' }}
-          </ion-button>
+          <div class="botones-ubicacion-grid ion-margin-top">
+            <ion-button
+              expand="block"
+              fill="outline"
+              shape="round"
+              :disabled="capturandoUbicacion"
+              @click="capturarUbicacion"
+            >
+              <ion-spinner v-if="capturandoUbicacion" name="crescent" slot="start"></ion-spinner>
+              <ion-icon v-else slot="start" :icon="navigateOutline"></ion-icon>
+              {{ capturandoUbicacion ? 'Obteniendo GPS...' : 'Estoy en la puerta del cliente' }}
+            </ion-button>
+
+            <ion-button
+              expand="block"
+              fill="outline"
+              color="secondary"
+              shape="round"
+              class="ion-margin-top"
+              @click="mapa_abierto = true"
+            >
+              <ion-icon slot="start" :icon="mapOutline"></ion-icon>
+              {{ form.direccion_latitud ? 'Corregir en el mapa' : 'Marcar en el mapa' }}
+            </ion-button>
+          </div>
         </div>
       </div>
       <!-- Banner de validación si faltan datos obligatorios -->
@@ -160,6 +180,16 @@
         {{ guardando ? 'Guardando...' : (cliente?.id ? 'Actualizar Cliente' : 'Crear Cliente') }}
       </ion-button>
     </ion-content>
+
+    <!-- Modal Selector de Ubicación en el Mapa (OpenStreetMap) -->
+    <comp-selector-ubicacion
+      :abierto="mapa_abierto"
+      :latitud="form.direccion_latitud"
+      :longitud="form.direccion_longitud"
+      :direccion="form.direccion"
+      @confirmar="tomar_punto_del_mapa"
+      @cerrar="mapa_abierto = false"
+    />
   </ion-modal>
 </template>
 
@@ -196,6 +226,8 @@ import { geolocalizacion_service } from '@/services/geolocalizacion_service';
 import { vibrar_toque, vibrar_error } from '@/services/vibracion_service';
 import { obtener_api_url } from '@/config/debug';
 import compAviso from '@/components/base/comp_aviso.vue';
+import compSelectorUbicacion from '@/components/base/comp_selector_ubicacion.vue';
+import compDictadoBoton from '@/components/base/comp_dictado_boton.vue';
 
 const props = defineProps({
   is_open: { type: Boolean, required: true },
@@ -203,6 +235,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['cerrar', 'guardado']);
+
+const mapa_abierto = ref(false);
 
 const form = ref({
   nombre: '',
@@ -212,6 +246,15 @@ const form = ref({
   direccion_latitud: null,
   direccion_longitud: null,
 });
+
+function tomar_punto_del_mapa(evento) {
+  form.value.direccion_latitud = evento.latitud;
+  form.value.direccion_longitud = evento.longitud;
+  if (evento.direccion && String(evento.direccion).trim()) {
+    form.value.direccion = String(evento.direccion).trim();
+  }
+  mapa_abierto.value = false;
+}
 
 const camposFaltantes = computed(() => {
   const faltantes = [];
@@ -547,5 +590,21 @@ const guardar = async () => {
   font-style: italic;
   color: var(--ion-color-medium, #92949c);
   margin: 0;
+}
+
+.fila-input-dictado {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.fila-input-dictado ion-input {
+  flex: 1;
+}
+
+.botones-ubicacion-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

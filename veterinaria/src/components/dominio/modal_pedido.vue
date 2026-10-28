@@ -130,14 +130,17 @@
         </div>
       </div>
 
-      <!-- Observaciones / Notas -->
+      <!-- Observaciones / Notas con dictado por voz (Unidad 10) -->
       <ion-item class="ion-margin-top">
         <ion-label position="stacked">Notas / Observaciones</ion-label>
-        <ion-textarea
-          v-model="form.notas"
-          rows="2"
-          placeholder="Instrucciones adicionales para la entrega..."
-        ></ion-textarea>
+        <div class="fila-input-dictado">
+          <ion-textarea
+            v-model="form.notas"
+            rows="2"
+            placeholder="Instrucciones adicionales para la entrega..."
+          ></ion-textarea>
+          <comp-dictado-boton :valor="form.notas" @actualizar="form.notas = $event" />
+        </div>
       </ion-item>
 
       <!-- Total general -->
@@ -205,6 +208,7 @@ import { enviar } from '@/services/ajax_service';
 import { vibrar_toque, vibrar_error } from '@/services/vibracion_service';
 import { formatear_coordenadas } from '@/services/geolocalizacion_service';
 import compAviso from '@/components/base/comp_aviso.vue';
+import compDictadoBoton from '@/components/base/comp_dictado_boton.vue';
 
 const props = defineProps({
   is_open: { type: Boolean, required: true },
@@ -512,5 +516,15 @@ onMounted(() => {
   font-size: 1.35rem;
   font-weight: 800;
   color: var(--ion-color-success, #10b981);
+}
+
+.fila-input-dictado {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.fila-input-dictado ion-textarea {
+  flex: 1;
 }
 </style>

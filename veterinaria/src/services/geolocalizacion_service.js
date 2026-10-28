@@ -115,10 +115,138 @@ export function url_mapa(latitud, longitud, direccion = '') {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion || '')}`;
 }
 
+/**
+ * Busca direcciones coincidentes usando Nominatim (OpenStreetMap).
+ * @param {string} texto
+ * @returns {Promise<Array<{ nombre: string, direccion: string, latitud: number, longitud: number }>>}
+ */
+export async function buscar_direcciones(texto) {
+  if (!texto || !texto.trim()) return [];
+  const consulta = texto.trim();
+  try {
+    const parametros = new URLSearchParams({
+      format: 'json',
+      q: consulta,
+      countrycodes: 'ar',
+      limit: '5',
+      addressdetails: '1',
+      'accept-language': 'es',
+    });
+    const url = `https://nominatim.openstreetmap.org/search?${parametros.toString()}`;
+    const respuesta = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'VeterinariaSanRoque/1.0',
+      },
+    });
+
+    if (!respuesta.ok) return [];
+    const resultados = await respuesta.json();
+    if (!Array.isArray(resultados)) return [];
+
+    return resultados.map((item) => {
+      const addr = item.address || {};
+      const calle = addr.road || addr.street || addr.pedestrian || addr.path || addr.footway || '';
+      const numero = addr.house_number || '';
+      const barrio = addr.suburb || addr.neighbourhood || addr.quarter || '';
+      const ciudad = addr.city || addr.town || addr.village || addr.municipality || '';
+
+      let direccionFormateada = '';
+      if (calle) {
+        const partes = [numero ? `${calle} ${numero}` : calle];
+        if (barrio && barrio.toLowerCase() !== ciudad.toLowerCase()) partes.push(barrio);
+        if (ciudad) partes.push(ciudad);
+        direccionFormateada = partes.join(', ');
+      } else if (barrio || ciudad) {
+        direccionFormateada = [barrio, ciudad].filter(Boolean).join(', ');
+      } else {
+        const segmentos = (item.display_name || '').split(',').map((s) => s.trim()).filter(Boolean);
+        direccionFormateada = segmentos.slice(0, 2).join(', ');
+      }
+
+      return {
+        nombre: item.display_name,
+        direccion: direccionFormateada,
+        latitud: parseFloat(item.lat),
+        longitud: parseFloat(item.lon),
+      };
+    });
+  } catch (error) {
+    console.warn('Error al buscar direcciones en OpenStreetMap:', error);
+    return [];
+  }
+}
+
+/**
+ * Geocodificación inversa: obtiene la dirección más representativa para un punto (lat, lng).
+ * Prioriza calle + altura, barrio y ciudad en lugar del display_name crudo.
+ * @param {number|string} latitud
+ * @param {number|string} longitud
+ * @returns {Promise<string>}
+ */
+export async function buscar_direccion_de_punto(latitud, longitud) {
+  if (latitud == null || longitud == null) return '';
+  const lat = parseFloat(latitud);
+  const lng = parseFloat(longitud);
+  if (isNaN(lat) || isNaN(lng)) return '';
+
+  try {
+    const parametros = new URLSearchParams({
+      format: 'json',
+      lat: String(lat),
+      lon: String(lng),
+      addressdetails: '1',
+      'accept-language': 'es',
+    });
+    const url = `https://nominatim.openstreetmap.org/reverse?${parametros.toString()}`;
+    const respuesta = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'VeterinariaSanRoque/1.0',
+      },
+    });
+
+    if (!respuesta.ok) return '';
+    const data = await respuesta.json();
+    const addr = data.address || {};
+    const calle = addr.road || addr.street || addr.pedestrian || addr.path || addr.footway || '';
+    const numero = addr.house_number || '';
+    const barrio = addr.suburb || addr.neighbourhood || addr.quarter || addr.city_district || '';
+    const ciudad = addr.city || addr.town || addr.village || addr.municipality || addr.hamlet || '';
+
+    if (calle) {
+      const partes = [numero ? `${calle} ${numero}` : calle];
+      if (barrio && barrio.toLowerCase() !== ciudad.toLowerCase()) {
+        partes.push(barrio);
+      }
+      if (ciudad) {
+        partes.push(ciudad);
+      }
+      return partes.join(', ');
+    }
+
+    if (barrio || ciudad) {
+      return [barrio, ciudad].filter(Boolean).join(', ');
+    }
+
+    if (data.display_name) {
+      const segmentos = data.display_name.split(',').map((s) => s.trim()).filter(Boolean);
+      return segmentos.slice(0, 2).join(', ');
+    }
+
+    return '';
+  } catch (error) {
+    console.warn('Error en reverse geocoding de OpenStreetMap:', error);
+    return '';
+  }
+}
+
 export const geolocalizacion_service = {
   obtener_ubicacion_actual,
   formatear_coordenadas,
   url_mapa,
+  buscar_direcciones,
+  buscar_direccion_de_punto,
 };
 
 export default geolocalizacion_service;
