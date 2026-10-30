@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Veterinaria.Api.Domain.Enums;
 
 namespace Veterinaria.Api.Domain.Entities;
 
@@ -14,4 +15,6 @@ public class PedidoItem : EntityBase
     public int Cantidad { get; set; }
     public decimal PrecioUnitario { get; set; }
     public decimal Subtotal { get; set; }
+
+    public EstadoItemPedido Estado { get; set; } = EstadoItemPedido.Pendiente;
 }

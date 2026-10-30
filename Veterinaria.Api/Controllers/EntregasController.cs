@@ -122,6 +122,7 @@ public class EntregasController : ControllerBase
                 asignada_en = e.AsignadaEn,
                 entregada_en = e.EntregadaEn,
                 observaciones = e.Observaciones,
+                firma_url = e.FirmaUrl,
                 creado_en = e.CreadoEn,
                 actualizado_en = e.ActualizadoEn
             })
@@ -179,10 +180,18 @@ public class EntregasController : ControllerBase
             return BadRequest(new { codigo = "repartidor_no_encontrado", mensaje = "El repartidor especificado no existe o está inactivo." });
         }
 
+        var estadoAnteriorAsignar = entrega.Estado;
         entrega.RepartidorId = repartidorDestinoId;
         entrega.Estado = EstadoEntrega.Asignada;
         entrega.AsignadaEn = DateTimeOffset.UtcNow;
         entrega.ActualizadoEn = DateTime.UtcNow;
+
+        _context.RegistrarEntrega(
+            usuarioActualId.Value,
+            entrega.Id,
+            estadoAnteriorAsignar.ToString(),
+            entrega.Estado.ToString(),
+            $"Asignada al repartidor #{repartidorDestinoId}.");
 
         await _context.SaveChangesAsync();
 
@@ -222,6 +231,7 @@ public class EntregasController : ControllerBase
             });
         }
 
+        var estadoAnterior = entrega.Estado;
         entrega.Estado = dto.Estado;
         entrega.ActualizadoEn = DateTime.UtcNow;
 
@@ -243,8 +253,16 @@ public class EntregasController : ControllerBase
             }
         }
 
+        var usuarioActualId = User.UsuarioId() ?? 1;
+
+        _context.RegistrarEntrega(
+            usuarioActualId,
+            entrega.Id,
+            estadoAnterior.ToString(),
+            dto.Estado.ToString(),
+            "Cambio de estado de entrega.");
+
         // Al pasar a Entregada o Cancelada, emitir Notificacion al creador del pedido (evitando auto-notificaciones)
-        var usuarioActualId = User.UsuarioId();
         if ((dto.Estado == EstadoEntrega.Entregada || dto.Estado == EstadoEntrega.Cancelada) &&
             entrega.Pedido?.UsuarioCreadorId.HasValue == true &&
             entrega.Pedido.UsuarioCreadorId.Value != usuarioActualId)
@@ -284,6 +302,55 @@ public class EntregasController : ControllerBase
             estado = entrega.Estado,
             entregada_en = entrega.EntregadaEn,
             mensaje = $"Estado de entrega actualizado a '{dto.Estado}'."
+        });
+    }
+
+    [HttpPut("{id}/firma")]
+    public async Task<IActionResult> RegistrarFirma(long id, [FromForm(Name = "firma")] IFormFile? firma)
+    {
+        if (firma == null || firma.Length == 0)
+        {
+            return BadRequest(new { codigo = "archivo_requerido", mensaje = "Debe proporcionar una imagen de la firma." });
+        }
+
+        var entrega = await _context.Entregas.FirstOrDefaultAsync(e => e.Id == id && e.Activo);
+        if (entrega == null)
+        {
+            return NotFound(new { codigo = "entrega_no_encontrada", mensaje = "La entrega no fue encontrada." });
+        }
+
+        var carpetaFirmas = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "firmas");
+        if (!Directory.Exists(carpetaFirmas))
+        {
+            Directory.CreateDirectory(carpetaFirmas);
+        }
+
+        var nombreArchivo = $"{Guid.NewGuid():N}.png";
+        var rutaCompleta = Path.Combine(carpetaFirmas, nombreArchivo);
+
+        using (var stream = new FileStream(rutaCompleta, FileMode.Create))
+        {
+            await firma.CopyToAsync(stream);
+        }
+
+        entrega.FirmaUrl = $"/uploads/firmas/{nombreArchivo}";
+        entrega.ActualizadoEn = DateTime.UtcNow;
+
+        var usuarioActualId = User.UsuarioId() ?? 1;
+        _context.RegistrarEntrega(
+            usuarioActualId,
+            entrega.Id,
+            entrega.Estado.ToString(),
+            entrega.Estado.ToString(),
+            "Se registró la firma de recepción.");
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            id = entrega.Id,
+            firma_url = entrega.FirmaUrl,
+            mensaje = "Firma registrada exitosamente."
         });
     }
 }

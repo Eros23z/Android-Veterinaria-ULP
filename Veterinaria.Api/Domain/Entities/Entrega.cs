@@ -21,4 +21,6 @@ public class Entrega : EntityBase
     public DateTimeOffset? AsignadaEn { get; set; }
     public DateTimeOffset? EntregadaEn { get; set; }
     public string? Observaciones { get; set; }
+
+    public string? FirmaUrl { get; set; }
 }

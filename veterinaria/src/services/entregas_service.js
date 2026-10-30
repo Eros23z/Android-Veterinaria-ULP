@@ -43,6 +43,21 @@ export const entregas_service = {
     }
     return await enviar(`/api/entregas/${id}/estado`, 'PUT', { estado: nuevo_estado });
   },
+
+  /**
+   * Guarda la imagen de la firma de conformidad de la entrega.
+   * @param {number|string} id
+   * @param {File|Blob} archivoFirma
+   * @returns {Promise<{ id: number, firma_url: string, mensaje: string }>}
+   */
+  async guardar_firma_entrega(id, archivoFirma) {
+    if (!id || !archivoFirma) {
+      throw new Error('El ID de entrega y el archivo de firma son obligatorios.');
+    }
+    const formData = new FormData();
+    formData.append('firma', archivoFirma, 'firma.png');
+    return await enviar(`/api/entregas/${id}/firma`, 'PUT', formData);
+  },
 };
 
 export default entregas_service;

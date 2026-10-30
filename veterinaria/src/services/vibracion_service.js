@@ -69,9 +69,33 @@ export async function vibrar_error(forzar = false) {
   }
 }
 
+/**
+ * Ejecuta una vibración háptica de confirmación o éxito.
+ * @param {boolean} [forzar=false]
+ */
+export async function vibrar_exito(forzar = false) {
+  if (!forzar && !tema_store.es_vibracion_activa()) return;
+
+  try {
+    await Haptics.notification({ type: NotificationType.Success }).catch(() => {});
+  } catch (_e) {
+    // Silencioso
+  }
+
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate([60, 40, 60]);
+    }
+  } catch (_e) {
+    // Silencioso
+  }
+}
+
 export const vibracion_service = {
   vibrar_toque,
   vibrar_error,
+  vibrar_exito,
 };
 
 export default vibracion_service;
+

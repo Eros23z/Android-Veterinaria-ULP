@@ -168,12 +168,32 @@
                   <ion-icon slot="start" :icon="swapHorizontalOutline"></ion-icon>
                   Cambiar estado
                 </ion-button>
+
+                <!-- Botón Detalle / Firma -->
+                <ion-button
+                  size="small"
+                  fill="outline"
+                  shape="round"
+                  color="primary"
+                  @click="abrirDetalleEntrega(entrega)"
+                >
+                  <ion-icon slot="start" :icon="documentTextOutline"></ion-icon>
+                  {{ (entrega.estado === 'en_camino' || entrega.estado === 'entregada') ? (entrega.firma_url ? 'Ver firma' : 'Firmar / Detalle') : 'Ver detalle' }}
+                </ion-button>
               </div>
             </ion-card-content>
           </ion-card>
         </div>
       </template>
     </comp-lista>
+
+    <!-- Modal Detalle y Firma de Entrega -->
+    <comp-entrega-detalle-modal
+      :is_open="modalDetalleAbierto"
+      :entrega="entregaSeleccionada"
+      @cerrar="modalDetalleAbierto = false"
+      @actualizado="onEntregaActualizada"
+    />
   </comp-page>
 </template>
 
@@ -206,15 +226,34 @@ import {
   handRightOutline,
   swapHorizontalOutline,
   closeCircleOutline,
+  documentTextOutline,
 } from 'ionicons/icons';
 import compPage from '@/components/estructura/comp_page.vue';
 import compEsqueleto from '@/components/base/comp_esqueleto.vue';
 import compLista from '@/components/base/comp_lista.vue';
+import CompEntregaDetalleModal from '@/components/dominio/comp_entrega_detalle_modal.vue';
 import { entregas_store } from '@/stores/entregas_store';
 import { geolocalizacion_service, formatear_coordenadas } from '@/services/geolocalizacion_service';
 import { vibrar_toque, vibrar_error } from '@/services/vibracion_service';
 
 const accionEnProgresoId = ref(null);
+const modalDetalleAbierto = ref(false);
+const entregaSeleccionada = ref(null);
+
+function abrirDetalleEntrega(entrega) {
+  entregaSeleccionada.value = entrega;
+  modalDetalleAbierto.value = true;
+}
+
+function onEntregaActualizada(evento) {
+  if (entregaSeleccionada.value && entregaSeleccionada.value.id === evento.id) {
+    entregaSeleccionada.value.firma_url = evento.firma_url;
+  }
+  const idx = entregas_store.entregas.findIndex((e) => e.id === evento.id);
+  if (idx !== -1) {
+    entregas_store.entregas[idx].firma_url = evento.firma_url;
+  }
+}
 
 async function refrescar(event = null) {
   await entregas_store.cargar(true);

@@ -227,6 +227,11 @@ namespace Veterinaria.Api.Migrations
                         .HasColumnType("nvarchar(50)")
                         .HasColumnName("estado");
 
+                    b.Property<string>("FirmaUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("firma_url");
+
                     b.Property<string>("Observaciones")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)")
@@ -250,6 +255,70 @@ namespace Veterinaria.Api.Migrations
                         .HasDatabaseName("ix_entregas_repartidor_id");
 
                     b.ToTable("entregas", (string)null);
+                });
+
+            modelBuilder.Entity("Veterinaria.Api.Domain.Entities.Historial", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit")
+                        .HasColumnName("activo");
+
+                    b.Property<DateTime>("ActualizadoEn")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("creado_en");
+
+                    b.Property<long?>("EntregaId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("entrega_id");
+
+                    b.Property<string>("EstadoAnterior")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("estado_anterior");
+
+                    b.Property<string>("EstadoNuevo")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("estado_nuevo");
+
+                    b.Property<string>("Observacion")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("observacion");
+
+                    b.Property<long?>("PedidoId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("pedido_id");
+
+                    b.Property<long>("UsuarioId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_historiales");
+
+                    b.HasIndex("EntregaId")
+                        .HasDatabaseName("ix_historiales_entrega_id");
+
+                    b.HasIndex("PedidoId")
+                        .HasDatabaseName("ix_historiales_pedido_id");
+
+                    b.HasIndex("UsuarioId")
+                        .HasDatabaseName("ix_historiales_usuario_id");
+
+                    b.ToTable("historiales", (string)null);
                 });
 
             modelBuilder.Entity("Veterinaria.Api.Domain.Entities.Notificacion", b =>
@@ -400,6 +469,12 @@ namespace Veterinaria.Api.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("creado_en");
 
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("estado");
+
                     b.Property<long>("PedidoId")
                         .HasColumnType("bigint")
                         .HasColumnName("pedido_id");
@@ -419,15 +494,15 @@ namespace Veterinaria.Api.Migrations
                         .HasColumnName("subtotal");
 
                     b.HasKey("Id")
-                        .HasName("pk_pedido_items");
+                        .HasName("pk_pedido_item");
 
                     b.HasIndex("PedidoId")
-                        .HasDatabaseName("ix_pedido_items_pedido_id");
+                        .HasDatabaseName("ix_pedido_item_pedido_id");
 
                     b.HasIndex("ProductoId")
-                        .HasDatabaseName("ix_pedido_items_producto_id");
+                        .HasDatabaseName("ix_pedido_item_producto_id");
 
-                    b.ToTable("pedido_items", (string)null);
+                    b.ToTable("pedido_item", (string)null);
                 });
 
             modelBuilder.Entity("Veterinaria.Api.Domain.Entities.Producto", b =>
@@ -668,6 +743,34 @@ namespace Veterinaria.Api.Migrations
                     b.Navigation("Repartidor");
                 });
 
+            modelBuilder.Entity("Veterinaria.Api.Domain.Entities.Historial", b =>
+                {
+                    b.HasOne("Veterinaria.Api.Domain.Entities.Entrega", "Entrega")
+                        .WithMany()
+                        .HasForeignKey("EntregaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_historiales_entregas_entrega_id");
+
+                    b.HasOne("Veterinaria.Api.Domain.Entities.Pedido", "Pedido")
+                        .WithMany()
+                        .HasForeignKey("PedidoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_historiales_pedidos_pedido_id");
+
+                    b.HasOne("Veterinaria.Api.Domain.Entities.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_historiales_usuarios_usuario_id");
+
+                    b.Navigation("Entrega");
+
+                    b.Navigation("Pedido");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("Veterinaria.Api.Domain.Entities.Notificacion", b =>
                 {
                     b.HasOne("Veterinaria.Api.Domain.Entities.Usuario", "Usuario")
@@ -707,14 +810,14 @@ namespace Veterinaria.Api.Migrations
                         .HasForeignKey("PedidoId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_pedido_items_pedidos_pedido_id");
+                        .HasConstraintName("fk_pedido_item_pedidos_pedido_id");
 
                     b.HasOne("Veterinaria.Api.Domain.Entities.Producto", "Producto")
                         .WithMany()
                         .HasForeignKey("ProductoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_pedido_items_productos_producto_id");
+                        .HasConstraintName("fk_pedido_item_productos_producto_id");
 
                     b.Navigation("Pedido");
 

@@ -7,6 +7,8 @@ import {
   shieldCheckmarkOutline,
   bicycleOutline,
   notificationsOutline,
+  clipboardOutline,
+  timeOutline,
 } from 'ionicons/icons';
 
 export const navegacion = [
@@ -61,6 +63,18 @@ export const navegacion = [
     sin_red: true,
   },
   {
+    id: 'preparacion',
+    grupo_menu: 'operacion',
+    titulo: 'Preparación',
+    orden: 41,
+    ruta: '/app/preparacion',
+    icono: clipboardOutline,
+    componente: () => import('@/views/comandas_page.vue'),
+    roles: ['ADMIN', 'VETERINARIO'],
+    menu_roles: ['ADMIN', 'VETERINARIO'],
+    tab_roles: [],
+  },
+  {
     id: 'entregas',
     grupo_menu: 'operacion',
     titulo: 'Repartos y Entregas',
@@ -68,6 +82,18 @@ export const navegacion = [
     ruta: '/app/entregas',
     icono: bicycleOutline,
     componente: () => import('@/views/entregas_page.vue'),
+    roles: ['ADMIN', 'VETERINARIO'],
+    menu_roles: ['ADMIN', 'VETERINARIO'],
+    tab_roles: [],
+  },
+  {
+    id: 'historial',
+    grupo_menu: 'operacion',
+    titulo: 'Auditoría',
+    orden: 43,
+    ruta: '/app/historial',
+    icono: timeOutline,
+    componente: () => import('@/views/historial_page.vue'),
     roles: ['ADMIN', 'VETERINARIO'],
     menu_roles: ['ADMIN', 'VETERINARIO'],
     tab_roles: [],

@@ -243,6 +243,14 @@ public class PedidosController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        _context.RegistrarPedido(
+            usuarioCreadorId ?? 1,
+            pedido.Id,
+            null,
+            pedido.Estado.ToString(),
+            "Creación de pedido.");
+        await _context.SaveChangesAsync();
+
         var codigoTexto = $"PED-{pedido.Id:D4}";
 
         return CreatedAtAction(nameof(GetPedidos), new { id = pedido.Id }, new
@@ -319,6 +327,13 @@ public class PedidosController : ControllerBase
             };
             _context.Notificaciones.Add(notificacion);
         }
+
+        _context.RegistrarPedido(
+            usuarioActualId ?? 1,
+            pedido.Id,
+            estadoAnterior.ToString(),
+            nuevoEstado.Value.ToString(),
+            "Cambio manual de estado.");
 
         await _context.SaveChangesAsync();
         return Ok(new

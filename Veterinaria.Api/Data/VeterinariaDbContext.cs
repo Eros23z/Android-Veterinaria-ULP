@@ -15,7 +15,9 @@ public class VeterinariaDbContext : DbContext
     public DbSet<Cliente> Clientes => Set<Cliente>();
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<PedidoItem> PedidoItems => Set<PedidoItem>();
+    public DbSet<PedidoItem> PedidosItems => PedidoItems;
     public DbSet<Entrega> Entregas => Set<Entrega>();
+    public DbSet<Historial> Historiales => Set<Historial>();
     public DbSet<Notificacion> Notificaciones => Set<Notificacion>();
     public DbSet<DispositivoPush> DispositivosPush => Set<DispositivoPush>();
     public DbSet<Rol> Roles => Set<Rol>();
@@ -83,6 +85,7 @@ public class VeterinariaDbContext : DbContext
             entity.HasKey(pi => pi.Id);
             entity.Property(pi => pi.PrecioUnitario).HasPrecision(18, 2);
             entity.Property(pi => pi.Subtotal).HasPrecision(18, 2);
+            entity.Property(pi => pi.Estado).HasConversion<string>().HasMaxLength(50);
 
             entity.HasOne(pi => pi.Pedido)
                 .WithMany(p => p.Items)
@@ -137,6 +140,7 @@ public class VeterinariaDbContext : DbContext
             entity.Property(e => e.DireccionLongitud).HasPrecision(18, 6);
             entity.Property(e => e.Estado).HasConversion<string>().HasMaxLength(50);
             entity.Property(e => e.Observaciones).HasMaxLength(500);
+            entity.Property(e => e.FirmaUrl).HasMaxLength(500);
 
             entity.HasOne(e => e.Pedido)
                 .WithMany()
@@ -172,6 +176,29 @@ public class VeterinariaDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.UsuarioId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Historial>(entity =>
+        {
+            entity.HasKey(h => h.Id);
+            entity.Property(h => h.EstadoAnterior).HasMaxLength(100);
+            entity.Property(h => h.EstadoNuevo).IsRequired().HasMaxLength(100);
+            entity.Property(h => h.Observacion).HasMaxLength(1000);
+
+            entity.HasOne(h => h.Usuario)
+                .WithMany()
+                .HasForeignKey(h => h.UsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(h => h.Pedido)
+                .WithMany()
+                .HasForeignKey(h => h.PedidoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(h => h.Entrega)
+                .WithMany()
+                .HasForeignKey(h => h.EntregaId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
